@@ -1,0 +1,23 @@
+{
+  "provider": "xiaomi",
+  "capturedAt": "2026-07-14",
+  "webEntry": "https://i.mi.com/note/h5#/",
+  "assetVersion": "main.3709ac69.chunk.js",
+  "auth": {
+    "mode": "playwright-browser-context",
+    "persistSecrets": false
+  },
+  "operations": [
+    { "name": "hasData", "method": "GET", "path": "/note/v2/hasData", "verification": "network-verified" },
+    { "name": "listNotes", "method": "GET", "path": "/note/full/page", "queryKeys": ["limit", "syncTag", "ts"], "verification": "network-verified" },
+    { "name": "syncNotes", "method": "GET", "path": "/note/sync/full/", "queryKeys": ["data", "inactiveTime", "ts"], "verification": "network-verified" },
+    { "name": "getNote", "method": "GET", "path": "/note/note/:id/", "queryKeys": ["ts"], "verification": "network-verified" },
+    { "name": "createNote", "method": "POST", "path": "/note/note", "bodyEncoding": "form", "bodyKeys": ["entry", "serviceToken"], "verification": "network-verified" },
+    { "name": "listFolderNotes", "method": "GET", "path": "/note/full/folder", "queryKeys": ["folderId", "noteId", "limit"], "verification": "source-verified" },
+    { "name": "downloadImage", "method": "GET", "path": "/file/full/v2", "queryKeys": ["type", "fileid"], "verification": "source-verified" },
+    { "name": "updateNote", "method": "POST", "path": "/note/note/:id", "bodyEncoding": "form", "bodyKeys": ["entry"], "verification": "source-verified" },
+    { "name": "deleteNote", "method": "POST", "path": "/note/full/:id/delete", "bodyEncoding": "form", "bodyKeys": ["tag", "purge"], "verification": "source-verified" },
+    { "name": "createFolder", "method": "POST", "path": "/note/folder", "bodyEncoding": "form", "bodyKeys": ["entry"], "verification": "source-verified" },
+    { "name": "updateFolder", "method": "POST", "path": "/note/folder/:id", "bodyEncoding": "form", "bodyKeys": ["entry"], "verification": "source-verified" }
+  ]
+}
