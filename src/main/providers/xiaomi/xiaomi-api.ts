@@ -1,0 +1,166 @@
+import { assertWriteVerified } from '../../contracts/loader';
+import type { OperationContract, ProviderContract } from '../../contracts/schema';
+import { z } from 'zod';
+
+const listEntrySchema = z.object({
+  id: z.string(),
+  folderId: z.number(),
+  subject: z.string(),
+  createDate: z.number(),
+  modifyDate: z.number()
+});
+
+const attachmentEntrySchema = z.object({
+  digest: z.string(),
+  fileId: z.string(),
+  mimeType: z.string()
+});
+
+const noteEntrySchema = listEntrySchema.extend({
+  content: z.string(),
+  encryptInfo: z.unknown().optional(),
+  setting: z.object({ data: z.array(attachmentEntrySchema) })
+});
+
+const listDataSchema = z.object({
+  entries: z.array(listEntrySchema),
+  folders: z.array(z.unknown()),
+  lastPage: z.boolean(),
+  syncTag: z.string()
+});
+
+const noteDataSchema = z.object({ entry: noteEntrySchema });
+const createdDataSchema = z.object({
+  entry: z.object({ id: z.string(), modifyDate: z.number().optional() })
+});
+
+export type XiaomiRequest = {
+  query?: Record<string, string | number>;
+  body?: Record<string, string>;
+  pathParameters?: Record<string, string>;
+};
+
+export interface XiaomiContractExecutor {
+  call<T>(operation: OperationContract, request: XiaomiRequest): Promise<T>;
+}
+
+export type XiaomiEnvelope<T> = {
+  code: number;
+  data: T;
+  retriable?: boolean;
+};
+
+export type XiaomiListEntry = {
+  id: string;
+  folderId: number;
+  subject: string;
+  createDate: number;
+  modifyDate: number;
+};
+
+export type XiaomiAttachmentEntry = {
+  digest: string;
+  fileId: string;
+  mimeType: string;
+};
+
+export type XiaomiNoteEntry = XiaomiListEntry & {
+  content: string;
+  encryptInfo?: unknown;
+  setting: { data: XiaomiAttachmentEntry[] };
+};
+
+export class XiaomiApi {
+  constructor(
+    private readonly executor: XiaomiContractExecutor,
+    private readonly contract: ProviderContract
+  ) {
+    if (contract.provider !== 'xiaomi') throw new Error('CONTRACT_PROVIDER_MISMATCH:xiaomi');
+  }
+
+  async hasData(): Promise<unknown> {
+    return this.call<unknown>('hasData', {});
+  }
+
+  async listNotes(syncTag?: string) {
+    const query: Record<string, string | number> = { limit: 200, ts: Date.now() };
+    if (syncTag) query.syncTag = syncTag;
+    const data = await this.call<unknown>('listNotes', { query });
+    return this.parseResponse('listNotes', listDataSchema, data);
+  }
+
+  async getNote(id: string) {
+    const data = await this.call<unknown>('getNote', {
+      pathParameters: { id },
+      query: { ts: Date.now() }
+    });
+    return this.parseResponse('getNote', noteDataSchema, data);
+  }
+
+  async downloadImage(fileId: string): Promise<Uint8Array> {
+    const operation = this.operation('downloadImage');
+    return this.execute(operation, {
+      query: { type: 'note_img', fileid: fileId }
+    });
+  }
+
+  async createFolder(entry: string): Promise<{ entry: { id: string } }> {
+    const operation = this.operation('createFolder');
+    assertWriteVerified(operation);
+    const data = this.unwrap(
+      await this.execute<XiaomiEnvelope<unknown>>(operation, { body: { entry } })
+    );
+    return this.parseResponse('createFolder', createdDataSchema, data);
+  }
+
+  async createNote(entry: string): Promise<{ entry: { id: string; modifyDate?: number } }> {
+    const operation = this.operation('createNote');
+    assertWriteVerified(operation);
+    const data = this.unwrap(
+      await this.execute<XiaomiEnvelope<unknown>>(operation, { body: { entry } })
+    );
+    return this.parseResponse('createNote', createdDataSchema, data);
+  }
+
+  private async call<T>(name: string, request: XiaomiRequest): Promise<T> {
+    const response = await this.execute<XiaomiEnvelope<T>>(this.operation(name), request);
+    return this.unwrap(response);
+  }
+
+  private async execute<T>(operation: OperationContract, request: XiaomiRequest): Promise<T> {
+    try {
+      return await this.executor.call<T>(operation, request);
+    } catch (error) {
+      if (error instanceof Error && ['HTTP_401', 'HTTP_403'].includes(error.message)) {
+        throw new Error('AUTH_EXPIRED');
+      }
+      if (error instanceof Error && error.message === 'HTTP_429') {
+        throw new Error('RATE_LIMITED');
+      }
+      throw error;
+    }
+  }
+
+  private operation(name: string): OperationContract {
+    const operation = this.contract.operations.find((candidate) => candidate.name === name);
+    if (!operation) throw new Error(`CONTRACT_OPERATION_MISSING:${name}`);
+    return operation;
+  }
+
+  private unwrap<T>(response: XiaomiEnvelope<T>): T {
+    if (response.code !== 0) {
+      throw new Error(response.retriable ? 'RATE_LIMITED' : `XIAOMI_API_${response.code}`);
+    }
+    return response.data;
+  }
+
+  private parseResponse<T extends z.ZodType>(
+    operation: string,
+    schema: T,
+    value: unknown
+  ): z.infer<T> {
+    const parsed = schema.safeParse(value);
+    if (!parsed.success) throw new Error(`XIAOMI_RESPONSE_INVALID:${operation}`);
+    return parsed.data;
+  }
+}

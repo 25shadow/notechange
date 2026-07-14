@@ -1,0 +1,31 @@
+{
+  "code": 0,
+  "data": {
+    "entries": [
+      {
+        "id": "synthetic-note-1",
+        "folderId": 0,
+        "subject": "合成标题一",
+        "snippet": "合成摘要",
+        "createDate": 1720915200000,
+        "modifyDate": 1720915260000,
+        "type": "note",
+        "status": "normal",
+        "tag": "synthetic-tag-1",
+        "colorId": 0,
+        "alertDate": 0,
+        "alertTag": 0,
+        "setting": { "data": [], "stickyTime": 0, "themeId": 0, "version": 1 }
+      }
+    ],
+    "folders": [
+      { "id": "synthetic-folder-1", "parentId": null, "name": "合成文件夹" }
+    ],
+    "lastPage": false,
+    "syncTag": "synthetic-cursor-2"
+  },
+  "description": "success",
+  "result": "ok",
+  "retriable": false,
+  "ts": 1720915260000
+}

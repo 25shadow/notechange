@@ -10,7 +10,8 @@ export const operationContractSchema = z.object({
   queryKeys: z.array(z.string()).optional(),
   bodyKeys: z.array(z.string()).optional(),
   wireBodyKeys: z.array(z.string()).optional(),
-  bodyEncoding: z.enum(['form', 'json']).optional()
+  bodyEncoding: z.enum(['form', 'json']).optional(),
+  responseShape: z.record(z.string(), z.record(z.string(), z.string())).optional()
 });
 
 export const providerContractSchema = z
