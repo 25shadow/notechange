@@ -11,6 +11,7 @@ export const operationContractSchema = z.object({
   bodyKeys: z.array(z.string()).optional(),
   wireBodyKeys: z.array(z.string()).optional(),
   bodyEncoding: z.enum(['form', 'json']).optional(),
+  payloadShape: z.record(z.string(), z.record(z.string(), z.string())).optional(),
   responseShape: z.record(z.string(), z.record(z.string(), z.string())).optional()
 });
 

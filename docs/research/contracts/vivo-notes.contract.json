@@ -21,7 +21,17 @@
     { "name": "deleteNote", "method": "POST", "path": "/note/expunge", "verification": "source-verified" },
     { "name": "createNotebook", "method": "POST", "path": "/noteBook/create", "verification": "source-verified" },
     { "name": "updateNotebook", "method": "POST", "path": "/noteBook/update", "verification": "source-verified" },
-    { "name": "createSync", "method": "POST", "path": "/sync/createSync/v2", "verification": "source-verified" },
+    {
+      "name": "createSync",
+      "method": "POST",
+      "path": "/sync/createSync/v2",
+      "wireBodyKeys": ["jvq_param"],
+      "verification": "source-verified",
+      "payloadShape": {
+        "request": { "type": "number", "lastUpdateCount": "number", "noteBooks": "array", "notes": "array", "tags": "array", "resources": "array" },
+        "note": { "guid": "string", "title": "string", "contentDigest": "string", "content": "string", "conflictTime": "null", "createTime": "number", "updateTime": "number", "contentUpdateTime": "number", "attrUpdateTime": "number", "importantLevel": "number", "noteBookGuid": "string", "tags": "array", "deleted": "number", "dirty": "number", "type": "number", "contentLoaded": "boolean", "symbolCnf": "string", "paperTexture": "string", "bgColor": "number", "pageMargins": "string", "syncProtocolVersion": "number", "isAiNote": "number", "aiQuery": "string" }
+      }
+    },
     { "name": "updateSync", "method": "POST", "path": "/sync/updateSync/v2", "verification": "source-verified" },
     { "name": "deleteSync", "method": "POST", "path": "/sync/deleteSync", "verification": "source-verified" },
     { "name": "combineSync", "method": "POST", "path": "/sync/combineSync/v2", "verification": "source-verified" },
