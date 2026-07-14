@@ -1,15 +1,8 @@
-import type { Page } from 'playwright';
 import { z } from 'zod';
 
 import { assertWriteVerified } from '../../contracts/loader';
 import type { OperationContract, ProviderContract } from '../../contracts/schema';
 import type { VivoCreateSyncRequest } from './vivo-sync-types';
-
-declare global {
-  interface Window {
-    VNoteServerMaodun?: { encrypt(value: string): { data: string } };
-  }
-}
 
 export interface VivoContractExecutor {
   call<T>(operation: OperationContract, payload: unknown): Promise<T>;
@@ -70,27 +63,4 @@ export class VivoApi {
     if (!parsed.success) throw new Error(`VIVO_RESPONSE_INVALID:${operation}`);
     return parsed.data;
   }
-}
-
-export async function vivoPost<T>(
-  page: Page,
-  path: string,
-  payload: unknown
-): Promise<T> {
-  return page.evaluate(
-    async ({ requestPath, businessPayload }) => {
-      const encoder = window.VNoteServerMaodun;
-      if (!encoder) throw new Error('VIVO_ENVELOPE_UNAVAILABLE');
-      const jvqParam = encoder.encrypt(JSON.stringify(businessPayload)).data;
-      const response = await fetch(`/note-api${requestPath}`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jvq_param: jvqParam })
-      });
-      if (!response.ok) throw new Error(`HTTP_${response.status}`);
-      return response.json() as Promise<T>;
-    },
-    { requestPath: path, businessPayload: payload }
-  );
 }

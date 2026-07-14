@@ -1,6 +1,14 @@
 import { join } from 'node:path';
 
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, ipcMain } from 'electron';
+
+import { SessionManager } from './browser/session-manager';
+import { registerMigrationIpc } from './runtime/ipc-handlers';
+import { MigrationRuntime } from './runtime/migration-runtime';
+import { createProvider } from './runtime/provider-factory';
+import { MemoryMigrationCheckpointStore } from './storage/memory-checkpoint-store';
+
+let migrationRuntime: MigrationRuntime | null = null;
 
 function createWindow(): void {
   const window = new BrowserWindow({
@@ -23,6 +31,12 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  migrationRuntime = new MigrationRuntime({
+    sessionManager: new SessionManager(),
+    createProvider,
+    checkpoints: new MemoryMigrationCheckpointStore()
+  });
+  registerMigrationIpc(ipcMain, migrationRuntime);
   createWindow();
 
   app.on('activate', () => {
@@ -32,4 +46,8 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
+});
+
+app.on('before-quit', () => {
+  void migrationRuntime?.dispose();
 });

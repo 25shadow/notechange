@@ -1,5 +1,7 @@
 # NoteChange 双向笔记迁移 Implementation Plan
 
+> **范围变更（2026-07-14）：** 用户要求先实现“小米导出 → vivo 导入”，并取消本地加密。Task 5 的 AES/safeStorage 方案已作废，当前使用普通 JSON 导出和进程内检查点；反向迁移暂缓。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 构建一个本地 Electron 桌面应用，通过 Playwright 登录会话和已保存的接口契约，在小米云笔记与 vivo 原子笔记之间双向迁移标题、正文、文件夹、图片附件和时间字段。

@@ -11,14 +11,23 @@
   },
   "operations": [
     { "name": "getConfig", "method": "POST", "path": "/account/getConfig", "wireBodyKeys": ["openId"], "verification": "network-verified" },
-    { "name": "getSyncState", "method": "POST", "path": "/sync/getSyncState", "wireBodyKeys": ["type"], "verification": "network-verified" },
+    {
+      "name": "getSyncState",
+      "method": "POST",
+      "path": "/sync/getSyncState",
+      "wireBodyKeys": ["type"],
+      "verification": "network-verified",
+      "responseShape": {
+        "data": { "currentTime": "number", "fullSyncBefore": "number", "hisSyncComplete": "boolean", "hisSyncType": "number", "updateCount": "number" }
+      }
+    },
     { "name": "listNotes", "method": "POST", "path": "/note/getAllNote/v2", "wireBodyKeys": ["jvq_param"], "verification": "network-verified" },
     { "name": "listNotebooks", "method": "POST", "path": "/noteBook/getList", "wireBodyKeys": ["maxEntries"], "verification": "network-verified" },
     { "name": "getNote", "method": "POST", "path": "/note/getContent/v2", "wireBodyKeys": ["jvq_param"], "verification": "network-verified" },
     { "name": "listHistory", "method": "POST", "path": "/history/note/list/v2", "wireBodyKeys": ["jvq_param"], "verification": "network-verified" },
     { "name": "getNoteWithItems", "method": "POST", "path": "/note/getIncludeItem/v2", "verification": "source-verified" },
     { "name": "updateNote", "method": "POST", "path": "/note/update/v2", "verification": "source-verified" },
-    { "name": "deleteNote", "method": "POST", "path": "/note/expunge", "verification": "source-verified" },
+    { "name": "deleteNote", "method": "POST", "path": "/note/expunge", "verification": "network-verified" },
     { "name": "createNotebook", "method": "POST", "path": "/noteBook/create", "verification": "source-verified" },
     { "name": "updateNotebook", "method": "POST", "path": "/noteBook/update", "verification": "source-verified" },
     {
@@ -26,7 +35,10 @@
       "method": "POST",
       "path": "/sync/createSync/v2",
       "wireBodyKeys": ["jvq_param"],
-      "verification": "source-verified",
+      "verification": "network-verified",
+      "responseShape": {
+        "data": { "currentTime": "number", "documents": "array", "noteBooks": "array", "notes": "array", "resources": "array", "tags": "array", "toDos": "array", "updateCount": "number" }
+      },
       "payloadShape": {
         "request": { "type": "number", "lastUpdateCount": "number", "noteBooks": "array", "notes": "array", "tags": "array", "resources": "array" },
         "note": { "guid": "string", "title": "string", "contentDigest": "string", "content": "string", "conflictTime": "null", "createTime": "number", "updateTime": "number", "contentUpdateTime": "number", "attrUpdateTime": "number", "importantLevel": "number", "noteBookGuid": "string", "tags": "array", "deleted": "number", "dirty": "number", "type": "number", "contentLoaded": "boolean", "symbolCnf": "string", "paperTexture": "string", "bgColor": "number", "pageMargins": "string", "syncProtocolVersion": "number", "isAiNote": "number", "aiQuery": "string" }

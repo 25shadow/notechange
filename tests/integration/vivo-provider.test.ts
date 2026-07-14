@@ -46,9 +46,20 @@ function withVerifiedCreate(contract: ProviderContract): ProviderContract {
   };
 }
 
+function withUnverifiedCreate(contract: ProviderContract): ProviderContract {
+  return {
+    ...contract,
+    operations: contract.operations.map((operation) =>
+      operation.name === 'createSync'
+        ? { ...operation, verification: 'source-verified' as const }
+        : operation
+    )
+  };
+}
+
 describe('VivoProvider', () => {
   it('默认拒绝尚未网络验证的 createSync', async () => {
-    const contract = parseProviderContract(vivoContractJson);
+    const contract = withUnverifiedCreate(parseProviderContract(vivoContractJson));
     const provider = new VivoProvider(new VivoApi(new FakeExecutor(), contract));
 
     await expect(provider.upsertNote(canonicalNote, '0')).rejects.toThrow(
@@ -76,5 +87,30 @@ describe('VivoProvider', () => {
     });
     expect(executor.calls[1]?.payload).not.toHaveProperty('jvq_param');
     expect(result.targetId).toBe('synthetic-target-1');
+  });
+
+  it('不会静默丢弃尚未支持上传的图片附件', async () => {
+    const executor = new FakeExecutor();
+    const contract = withVerifiedCreate(parseProviderContract(vivoContractJson));
+    const provider = new VivoProvider(new VivoApi(executor, contract));
+
+    await expect(
+      provider.upsertNote(
+        {
+          ...canonicalNote,
+          attachments: [
+            {
+              sourceId: 'image-1',
+              mimeType: 'image/png',
+              filename: 'synthetic.png',
+              sha256: 'b'.repeat(64),
+              localPath: '/synthetic/image'
+            }
+          ]
+        },
+        '0'
+      )
+    ).rejects.toThrow('VIVO_ATTACHMENTS_UNSUPPORTED');
+    expect(executor.calls).toEqual([]);
   });
 });

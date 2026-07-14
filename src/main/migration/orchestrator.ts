@@ -143,7 +143,8 @@ function classifyMigrationError(error: unknown): string {
     'ENCRYPTED_NOTE',
     'FORMAT_INVALID',
     'NETWORK_TRANSIENT',
-    'RATE_LIMITED'
+    'RATE_LIMITED',
+    'VIVO_ATTACHMENTS_UNSUPPORTED'
   ]);
   return allowed.has(value) ? value : 'UNKNOWN';
 }

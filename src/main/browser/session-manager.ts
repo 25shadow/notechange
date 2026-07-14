@@ -42,6 +42,12 @@ export class SessionManager {
     }
   }
 
+  getPage(provider: string): Page | null {
+    const managed = this.contexts.get(provider);
+    if (!managed) return null;
+    return managed.context.pages()[0] ?? null;
+  }
+
   async disposeAll(): Promise<void> {
     await Promise.all([...this.contexts.keys()].map((provider) => this.dispose(provider)));
   }

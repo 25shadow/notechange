@@ -45,6 +45,8 @@ describe('SessionManager', () => {
   it('在页面上下文中使用 HttpOnly 登录态调用同源接口', async () => {
     const page = await sessionManager.open('test', origin);
 
+    expect(sessionManager.getPage('test')).toBe(page);
+
     await expect(runSameOrigin(page, '/api/me', { method: 'GET' })).resolves.toEqual({
       authenticated: true
     });
