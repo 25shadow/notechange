@@ -74,6 +74,10 @@ export const ipcChannels = {
   getLoginState: 'notechange:get-login-state',
   startLogin: 'notechange:start-login',
   scanXiaomi: 'notechange:scan-xiaomi',
+  getLatestExportSummary: 'notechange:get-latest-export-summary',
+  getExportPreview: 'notechange:get-export-preview',
+  getExportPreviewDetail: 'notechange:get-export-preview-detail',
+  getExportAttachment: 'notechange:get-export-attachment',
   confirmMigration: 'notechange:confirm-migration',
   startImport: 'notechange:start-import',
   cancelMigration: 'notechange:cancel-migration'

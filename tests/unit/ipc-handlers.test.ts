@@ -15,6 +15,10 @@ describe('registerMigrationIpc', () => {
       getLoginState: vi.fn(async () => ({ authenticated: false, accountLabel: null })),
       startLogin: vi.fn(async () => ({ authenticated: true, accountLabel: null })),
       scanXiaomi: vi.fn(async () => ({ noteCount: 0, attachmentCount: 0, warningCount: 0 })),
+      getLatestExportSummary: vi.fn(async () => null),
+      getExportPreview: vi.fn(async () => ({ total: 0, items: [] })),
+      getExportPreviewDetail: vi.fn(),
+      getExportAttachment: vi.fn(),
       confirmMigration: vi.fn(),
       startImport: vi.fn(async () => ({
         created: 0,
@@ -32,5 +36,13 @@ describe('registerMigrationIpc', () => {
     await expect(
       handlers.get(ipcChannels.startLogin)?.({}, 'unknown')
     ).rejects.toThrow('INVALID_PROVIDER');
+
+    const query = { search: '', filter: 'all', offset: 0, limit: 50 } as const;
+    await handlers.get(ipcChannels.getExportPreview)?.({}, query);
+    expect(runtime.getExportPreview).toHaveBeenCalledWith(query);
+    await handlers.get(ipcChannels.getExportPreviewDetail)?.({}, 'note-1');
+    expect(runtime.getExportPreviewDetail).toHaveBeenCalledWith('note-1');
+    await handlers.get(ipcChannels.getExportAttachment)?.({}, 'note-1', 'a'.repeat(64));
+    expect(runtime.getExportAttachment).toHaveBeenCalledWith('note-1', 'a'.repeat(64));
   });
 });

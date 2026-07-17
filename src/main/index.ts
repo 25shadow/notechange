@@ -8,6 +8,8 @@ import { registerMigrationIpc } from './runtime/ipc-handlers';
 import { MigrationRuntime } from './runtime/migration-runtime';
 import { createProvider } from './runtime/provider-factory';
 import { MemoryMigrationCheckpointStore } from './storage/memory-checkpoint-store';
+import { FileExportBundleStore } from './storage/file-export-bundle-store';
+import { exportRoot } from './storage/export-root';
 
 let migrationRuntime: MigrationRuntime | null = null;
 
@@ -38,7 +40,8 @@ app.whenReady().then(() => {
       browserProfileRoot(app.getPath('userData'))
     ),
     createProvider,
-    checkpoints: new MemoryMigrationCheckpointStore()
+    checkpoints: new MemoryMigrationCheckpointStore(),
+    exports: new FileExportBundleStore(exportRoot(app.getPath('userData')))
   });
   registerMigrationIpc(ipcMain, migrationRuntime);
   createWindow();
