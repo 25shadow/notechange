@@ -7,6 +7,10 @@
     "mode": "playwright-browser-context",
     "persistSecrets": false
   },
+  "fieldSemantics": {
+    "getNote.entry.extraInfo": "JSON 字符串；title 是小米笔记真实标题，note_content_type 是内容类型（例如 common 或 mind）",
+    "getNote.entry.subject": "真实官网响应中通常为空，不能作为笔记标题来源"
+  },
   "operations": [
     { "name": "hasData", "method": "GET", "path": "/note/v2/hasData", "verification": "network-verified" },
     {

@@ -18,6 +18,7 @@ const attachmentEntrySchema = z.object({
 
 const noteEntrySchema = listEntrySchema.extend({
   content: z.string(),
+  extraInfo: z.string().optional().default(''),
   encryptInfo: z.unknown().optional(),
   setting: z.object({ data: z.array(attachmentEntrySchema).default([]) })
 });
@@ -66,6 +67,7 @@ export type XiaomiAttachmentEntry = {
 
 export type XiaomiNoteEntry = XiaomiListEntry & {
   content: string;
+  extraInfo: string;
   encryptInfo?: unknown;
   setting: { data: XiaomiAttachmentEntry[] };
 };

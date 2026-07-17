@@ -44,6 +44,20 @@ type XiaomiCreateEntry = {
 };
 ```
 
+### 标题字段
+
+`GET /note/note/:id/` 返回的 `entry.subject` 在真实数据中通常为空，不能作为标题。
+真实标题位于 `entry.extraInfo` JSON 字符串的 `title` 字段；同一 JSON 的
+`note_content_type` 表示内容类型（实测包括 `common`，参考实现还处理 `mind`）。
+
+2026-07-17 在已登录官网抽样 19 条详情：19 条 `subject` 均为空，10 条存在非空
+`extraInfo.title`，并观察到 `title`、`note_content_type`、`mind_content`、
+`mind_content_plain_text` 四个 `extraInfo` 键。抽样只记录字段和计数，不保存标题或正文。
+
+社区参考代码也按 `JSON.parse(extraInfo).title` 导出标题：
+`https://www.zhihu.com/question/35329107/answer/2726573615`。该代码只作为交叉参考，
+最终契约以小米官网真实响应为准。
+
 ### 官方前端源码确认
 
 | 方法 | 路径 | 参数或请求体 | 用途 |

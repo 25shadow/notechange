@@ -1,11 +1,13 @@
 import type { CanonicalNote } from '../../../shared/domain';
 import { normalizeContent } from '../../migration/content';
+import { parseXiaomiNoteTitle } from '../../migration/note-title';
 import type { XiaomiNoteEntry } from './xiaomi-api';
 
 export function mapXiaomiNote(entry: XiaomiNoteEntry): CanonicalNote {
   const attachmentHashes = entry.setting.data.map(({ digest }) => digest);
+  const title = parseXiaomiNoteTitle(entry.extraInfo);
   const normalized = normalizeContent(entry.content, {
-    title: entry.subject,
+    title,
     attachmentSha256: attachmentHashes,
     folderPath: entry.folderId == null ? '' : String(entry.folderId)
   });
@@ -21,7 +23,7 @@ export function mapXiaomiNote(entry: XiaomiNoteEntry): CanonicalNote {
       entry.folderId == null || String(entry.folderId) === '0'
         ? null
         : String(entry.folderId),
-    title: entry.subject,
+    title,
     html: normalized.html,
     plainText: normalized.plainText,
     attachments: entry.setting.data.map((attachment) => ({
