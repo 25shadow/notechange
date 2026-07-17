@@ -319,4 +319,32 @@ describe('MigrationRuntime', () => {
       attachments: []
     });
   });
+
+  it('从本地恢复的批次导入 vivo 时不要求小米在线', async () => {
+    const vivoPage = {} as Page;
+    const vivo = new FakeProvider('vivo');
+    const exports = new MemoryExports();
+    await exports.save({ notes: [canonicalNote], attachmentCount: 0, warningCount: 0 });
+    const sessionManager = {
+      getPage: vi.fn((provider: string) => provider === 'vivo' ? vivoPage : null),
+      open: vi.fn(),
+      persist: vi.fn(),
+      switchToHeaded: vi.fn(),
+      switchToHeadless: vi.fn(),
+      disposeAll: vi.fn(async () => undefined)
+    };
+    const runtime = new MigrationRuntime({
+      sessionManager,
+      createProvider: (provider) => {
+        if (provider === 'xiaomi') throw new Error('XIAOMI_MUST_NOT_BE_CREATED');
+        return vivo;
+      },
+      checkpoints: new MemoryCheckpoints(),
+      exports
+    });
+
+    await runtime.getLatestExportSummary();
+    runtime.confirmMigration();
+    await expect(runtime.startImport()).resolves.toMatchObject({ created: 1 });
+  });
 });

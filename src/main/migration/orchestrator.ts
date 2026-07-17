@@ -41,12 +41,13 @@ export class MigrationOrchestrator {
   private cancelled = false;
 
   constructor(
-    private readonly source: NotesProvider,
+    private readonly source: NotesProvider | null,
     private readonly target: NotesProvider,
     private readonly checkpoints: MigrationCheckpointStore
   ) {}
 
   async exportFromSource(): Promise<ExportBundle> {
+    if (!this.source) throw new Error('SOURCE_PROVIDER_MISSING');
     return exportProviderNotes(this.source);
   }
 

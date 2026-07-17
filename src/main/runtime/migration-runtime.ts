@@ -217,10 +217,9 @@ export class MigrationRuntime {
   async startImport(): Promise<RendererMigrationReport> {
     if (!this.bundle) throw new Error('EXPORT_BUNDLE_MISSING');
     if (!this.confirmed) throw new Error('MIGRATION_NOT_CONFIRMED');
-    const sourcePage = this.requirePage('xiaomi');
     const targetPage = this.requirePage('vivo');
     this.orchestrator = new MigrationOrchestrator(
-      this.options.createProvider('xiaomi', sourcePage),
+      null,
       this.options.createProvider('vivo', targetPage),
       this.options.checkpoints
     );
