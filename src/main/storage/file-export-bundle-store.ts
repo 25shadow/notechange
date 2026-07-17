@@ -1,8 +1,10 @@
 import {
   chmod,
   copyFile,
+  lstat,
   mkdir,
   readFile,
+  readdir,
   rename,
   rm,
   stat,
@@ -88,7 +90,48 @@ export class FileExportBundleStore implements ExportBundleStore {
 
     try {
       const latest = latestSchema.parse(JSON.parse(latestRaw));
-      const batchDirectory = join(this.rootDirectory, latest.batchId);
+      const stored = await this.load(latest.batchId);
+      if (!stored) throw new Error('BATCH_MISSING');
+      return stored;
+    } catch {
+      throw new Error('LOCAL_EXPORT_INVALID');
+    }
+  }
+
+  async list(): Promise<StoredExportBundle[]> {
+    let entries;
+    try {
+      entries = await readdir(this.rootDirectory, { withFileTypes: true });
+    } catch (error) {
+      if (isNotFound(error)) return [];
+      throw new Error('LOCAL_EXPORT_INVALID');
+    }
+
+    const stored = await Promise.all(
+      entries
+        .filter((entry) => entry.isDirectory() && !entry.name.endsWith('.tmp'))
+        .map(async (entry) => {
+          try {
+            return await this.load(entry.name);
+          } catch {
+            return null;
+          }
+        })
+    );
+    return stored
+      .filter((entry): entry is StoredExportBundle => entry !== null)
+      .sort((left, right) =>
+        right.exportedAt.localeCompare(left.exportedAt) ||
+        right.batchId.localeCompare(left.batchId)
+      );
+  }
+
+  async load(batchId: string): Promise<StoredExportBundle | null> {
+    assertBatchId(batchId);
+    const batchDirectory = join(this.rootDirectory, batchId);
+    try {
+      const info = await lstat(batchDirectory);
+      if (!info.isDirectory() || info.isSymbolicLink()) throw new Error('BATCH_INVALID');
       const manifest = manifestSchema.parse(
         JSON.parse(await readFile(join(batchDirectory, 'manifest.json'), 'utf8'))
       );
@@ -96,7 +139,7 @@ export class FileExportBundleStore implements ExportBundleStore {
         JSON.parse(await readFile(join(batchDirectory, 'notes.json'), 'utf8'))
       );
       if (
-        manifest.batchId !== latest.batchId ||
+        manifest.batchId !== batchId ||
         manifest.noteCount !== notesFile.notes.length ||
         manifest.attachmentCount !== notesFile.notes.reduce((sum, note) => sum + note.attachments.length, 0) ||
         manifest.warningCount !== notesFile.notes.reduce((sum, note) => sum + note.warnings.length, 0)
@@ -118,12 +161,36 @@ export class FileExportBundleStore implements ExportBundleStore {
         )
       );
       return { ...manifest, bundle: resolved };
-    } catch {
+    } catch (error) {
+      if (isNotFound(error)) return null;
       throw new Error('LOCAL_EXPORT_INVALID');
     }
   }
 
+  async delete(batchId: string): Promise<void> {
+    assertBatchId(batchId);
+    const batchDirectory = join(this.rootDirectory, batchId);
+    try {
+      const info = await lstat(batchDirectory);
+      if (!info.isDirectory() || info.isSymbolicLink()) throw new Error('EXPORT_BATCH_ID_INVALID');
+    } catch (error) {
+      if (isNotFound(error)) return;
+      throw error;
+    }
+    await rm(batchDirectory, { recursive: true, force: true });
+    const [latest] = await this.list();
+    if (latest) {
+      await writeJsonAtomic(join(this.rootDirectory, 'latest.json'), {
+        schemaVersion: 1,
+        batchId: latest.batchId
+      });
+    } else {
+      await rm(join(this.rootDirectory, 'latest.json'), { force: true });
+    }
+  }
+
   async readAttachment(batchId: string, relativePath: string): Promise<Uint8Array> {
+    assertBatchId(batchId);
     const batchDirectory = resolve(this.rootDirectory, batchId);
     const filePath = resolve(batchDirectory, relativePath);
     if (!filePath.startsWith(`${batchDirectory}${sep}`)) throw new Error('EXPORT_ATTACHMENT_MISSING');
@@ -194,4 +261,14 @@ async function writeJsonAtomic(path: string, value: unknown): Promise<void> {
 
 function isNotFound(error: unknown): boolean {
   return typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT';
+}
+
+function assertBatchId(batchId: string): void {
+  if (
+    !/^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$/.test(batchId) ||
+    batchId === '.' ||
+    batchId === '..'
+  ) {
+    throw new Error('EXPORT_BATCH_ID_INVALID');
+  }
 }

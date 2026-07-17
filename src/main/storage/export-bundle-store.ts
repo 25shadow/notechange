@@ -11,6 +11,9 @@ export type StoredExportBundle = {
 
 export interface ExportBundleStore {
   save(bundle: ExportBundle): Promise<StoredExportBundle>;
+  list(): Promise<StoredExportBundle[]>;
+  load(batchId: string): Promise<StoredExportBundle | null>;
   loadLatest(): Promise<StoredExportBundle | null>;
+  delete(batchId: string): Promise<void>;
   readAttachment(batchId: string, relativePath: string): Promise<Uint8Array>;
 }

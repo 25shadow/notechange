@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, rm, unlink, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readdir, rm, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -46,6 +46,45 @@ describe('FileExportBundleStore', () => {
     await unlink(join(attachmentDirectory, attachment));
 
     await expect(store.loadLatest()).rejects.toThrow('LOCAL_EXPORT_INVALID');
+  });
+
+  it('按时间倒序列出、读取并逐批删除本地导出', async () => {
+    const { root, bundle } = await fixture();
+    const exportRoot = join(root, 'exports');
+    const store = new FileExportBundleStore(exportRoot);
+    const first = await store.save(bundle);
+    await new Promise((resolve) => setTimeout(resolve, 2));
+    const second = await store.save(bundle);
+
+    expect((await store.list()).map((item) => item.batchId)).toEqual([
+      second.batchId,
+      first.batchId
+    ]);
+    await expect(store.load(first.batchId)).resolves.toMatchObject({ batchId: first.batchId });
+
+    await store.delete(second.batchId);
+    await expect(store.load(second.batchId)).resolves.toBeNull();
+    await expect(store.loadLatest()).resolves.toMatchObject({ batchId: first.batchId });
+
+    await store.delete(first.batchId);
+    await expect(store.loadLatest()).resolves.toBeNull();
+    await expect(access(join(exportRoot, 'latest.json'))).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it('忽略临时和损坏目录并拒绝路径穿越删除', async () => {
+    const { root, bundle } = await fixture();
+    const exportRoot = join(root, 'exports');
+    const store = new FileExportBundleStore(exportRoot);
+    const saved = await store.save(bundle);
+    await mkdir(join(exportRoot, 'unfinished.tmp'));
+    await mkdir(join(exportRoot, 'broken-batch'));
+    await writeFile(join(exportRoot, 'broken-batch', 'manifest.json'), '{invalid', 'utf8');
+    const outside = join(root, 'outside.txt');
+    await writeFile(outside, 'keep', 'utf8');
+
+    expect((await store.list()).map((item) => item.batchId)).toEqual([saved.batchId]);
+    await expect(store.delete('../outside.txt')).rejects.toThrow('EXPORT_BATCH_ID_INVALID');
+    await expect(access(outside)).resolves.toBeUndefined();
   });
 });
 
