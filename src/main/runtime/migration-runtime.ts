@@ -2,6 +2,11 @@ import type { Page } from 'playwright';
 
 import type {
   CloudProvider,
+  ExportAttachmentData,
+  ExportPreviewDetail,
+  ExportPreviewPage,
+  ExportPreviewQuery,
+  LocalExportSummary,
   RendererLoginState,
   RendererMigrationReport,
   ScanSummary
@@ -14,6 +19,10 @@ import {
 } from '../migration/orchestrator';
 import type { NotesProvider } from '../providers/provider';
 import type { BrowserMode } from '../browser/session-manager';
+import type {
+  ExportBundleStore,
+  StoredExportBundle
+} from '../storage/export-bundle-store';
 
 export interface RuntimeSessionManager {
   getPage(provider: string): Page | null;
@@ -33,6 +42,7 @@ export type MigrationRuntimeOptions = {
   sessionManager: RuntimeSessionManager;
   createProvider: RuntimeProviderFactory;
   checkpoints: MigrationCheckpointStore;
+  exports: ExportBundleStore;
   loginPolling?: {
     intervalMs: number;
     timeoutMs: number;
@@ -48,6 +58,7 @@ const providerUrls: Record<CloudProvider, string> = {
 export class MigrationRuntime {
   private orchestrator: MigrationOrchestrator | null = null;
   private bundle: ExportBundle | null = null;
+  private storedExport: StoredExportBundle | null = null;
   private confirmed = false;
 
   constructor(private readonly options: MigrationRuntimeOptions) {}
@@ -121,9 +132,11 @@ export class MigrationRuntime {
 
   async scanXiaomi(): Promise<ScanSummary> {
     const sourcePage = this.requirePage('xiaomi');
-    this.bundle = await exportProviderNotes(
+    const exported = await exportProviderNotes(
       this.options.createProvider('xiaomi', sourcePage)
     );
+    this.storedExport = await this.options.exports.save(exported);
+    this.bundle = this.storedExport.bundle;
     this.orchestrator = null;
     this.confirmed = false;
     return {
@@ -131,6 +144,69 @@ export class MigrationRuntime {
       attachmentCount: this.bundle.attachmentCount,
       warningCount: this.bundle.warningCount
     };
+  }
+
+  async getLatestExportSummary(): Promise<LocalExportSummary | null> {
+    const stored = await this.ensureStoredExport(false);
+    return stored ? toLocalSummary(stored) : null;
+  }
+
+  async getExportPreview(query: ExportPreviewQuery): Promise<ExportPreviewPage> {
+    const stored = await this.ensureStoredExport(true);
+    validatePreviewQuery(query);
+    const search = query.search.trim().toLocaleLowerCase();
+    const filtered = stored.bundle.notes.filter((note) => {
+      if (query.filter === 'warnings' && note.warnings.length === 0) return false;
+      if (query.filter === 'attachments' && note.attachments.length === 0) return false;
+      return !search || `${note.title}\n${note.plainText}`.toLocaleLowerCase().includes(search);
+    });
+    return {
+      total: filtered.length,
+      items: filtered.slice(query.offset, query.offset + query.limit).map((note) => ({
+        sourceId: note.sourceId,
+        title: note.title || '无标题',
+        excerpt: note.plainText.replace(/\s+/g, ' ').trim().slice(0, 140),
+        modifiedAt: note.modifiedAt,
+        attachmentCount: note.attachments.length,
+        warningCount: note.warnings.length
+      }))
+    };
+  }
+
+  async getExportPreviewDetail(sourceId: string): Promise<ExportPreviewDetail> {
+    const note = (await this.ensureStoredExport(true)).bundle.notes.find(
+      (candidate) => candidate.sourceId === sourceId
+    );
+    if (!note) throw new Error('EXPORT_NOTE_MISSING');
+    return {
+      sourceId: note.sourceId,
+      folderSourceId: note.folderSourceId,
+      title: note.title || '无标题',
+      plainText: note.plainText,
+      createdAt: note.createdAt,
+      modifiedAt: note.modifiedAt,
+      attachments: note.attachments.map(({ sha256, filename, mimeType }) => ({
+        sha256,
+        filename,
+        mimeType
+      })),
+      warnings: note.warnings
+    };
+  }
+
+  async getExportAttachment(
+    sourceId: string,
+    sha256: string
+  ): Promise<ExportAttachmentData> {
+    const stored = await this.ensureStoredExport(true);
+    const note = stored.bundle.notes.find((candidate) => candidate.sourceId === sourceId);
+    const attachment = note?.attachments.find((candidate) => candidate.sha256 === sha256);
+    if (!attachment) throw new Error('EXPORT_ATTACHMENT_MISSING');
+    const bytes = await this.options.exports.readAttachment(
+      stored.batchId,
+      attachment.localPath
+    );
+    return { mimeType: attachment.mimeType, base64: Buffer.from(bytes).toString('base64') };
   }
 
   confirmMigration(): void {
@@ -160,7 +236,19 @@ export class MigrationRuntime {
     await this.options.sessionManager.disposeAll();
     this.orchestrator = null;
     this.bundle = null;
+    this.storedExport = null;
     this.confirmed = false;
+  }
+
+  private async ensureStoredExport(required: true): Promise<StoredExportBundle>;
+  private async ensureStoredExport(required: false): Promise<StoredExportBundle | null>;
+  private async ensureStoredExport(required: boolean): Promise<StoredExportBundle | null> {
+    if (!this.storedExport) {
+      this.storedExport = await this.options.exports.loadLatest();
+      this.bundle = this.storedExport?.bundle ?? null;
+    }
+    if (required && !this.storedExport) throw new Error('EXPORT_BUNDLE_MISSING');
+    return this.storedExport;
   }
 
   private requirePage(provider: CloudProvider): Page {
@@ -183,5 +271,25 @@ export class MigrationRuntime {
       if (Date.now() >= deadline) throw new Error(timeoutError);
       await sleep(polling.intervalMs);
     }
+  }
+}
+
+function toLocalSummary(stored: StoredExportBundle): LocalExportSummary {
+  return {
+    batchId: stored.batchId,
+    exportedAt: stored.exportedAt,
+    noteCount: stored.noteCount,
+    attachmentCount: stored.attachmentCount,
+    warningCount: stored.warningCount
+  };
+}
+
+function validatePreviewQuery(query: ExportPreviewQuery): void {
+  if (!Number.isInteger(query.offset) || query.offset < 0) throw new Error('PREVIEW_QUERY_INVALID');
+  if (!Number.isInteger(query.limit) || query.limit < 1 || query.limit > 100) {
+    throw new Error('PREVIEW_QUERY_INVALID');
+  }
+  if (!['all', 'warnings', 'attachments'].includes(query.filter)) {
+    throw new Error('PREVIEW_QUERY_INVALID');
   }
 }

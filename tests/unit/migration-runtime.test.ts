@@ -7,6 +7,11 @@ import type {
   MigrationCheckpoint,
   MigrationCheckpointStore
 } from '../../src/main/migration/orchestrator';
+import type { ExportBundle } from '../../src/main/migration/orchestrator';
+import type {
+  ExportBundleStore,
+  StoredExportBundle
+} from '../../src/main/storage/export-bundle-store';
 import type {
   DownloadedAttachment,
   LoginState,
@@ -76,6 +81,32 @@ class MemoryCheckpoints implements MigrationCheckpointStore {
   }
 }
 
+class MemoryExports implements ExportBundleStore {
+  value: StoredExportBundle | null = null;
+  saves = 0;
+
+  async save(bundle: ExportBundle): Promise<StoredExportBundle> {
+    this.saves += 1;
+    this.value = {
+      batchId: 'batch-1',
+      exportedAt: '2026-07-17T00:00:00.000Z',
+      noteCount: bundle.notes.length,
+      attachmentCount: bundle.attachmentCount,
+      warningCount: bundle.warningCount,
+      bundle
+    };
+    return this.value;
+  }
+
+  async loadLatest() {
+    return this.value;
+  }
+
+  async readAttachment() {
+    return new Uint8Array([1, 2, 3]);
+  }
+}
+
 describe('MigrationRuntime', () => {
   it('复用登录页，并在确认前只导出不写入 vivo', async () => {
     const page = {} as Page;
@@ -93,6 +124,7 @@ describe('MigrationRuntime', () => {
       sessionManager,
       createProvider: (provider) => (provider === 'xiaomi' ? xiaomi : vivo),
       checkpoints: new MemoryCheckpoints()
+      , exports: new MemoryExports()
     });
 
     await runtime.startLogin('xiaomi');
@@ -137,6 +169,7 @@ describe('MigrationRuntime', () => {
       sessionManager,
       createProvider: () => provider,
       checkpoints: new MemoryCheckpoints(),
+      exports: new MemoryExports(),
       loginPolling: { intervalMs: 0, timeoutMs: 100, sleep: async () => undefined }
     });
 
@@ -174,7 +207,8 @@ describe('MigrationRuntime', () => {
     const runtime = new MigrationRuntime({
       sessionManager,
       createProvider: (provider) => (provider === 'xiaomi' ? xiaomi : vivo),
-      checkpoints: new MemoryCheckpoints()
+      checkpoints: new MemoryCheckpoints(),
+      exports: new MemoryExports()
     });
 
     await expect(runtime.scanXiaomi()).resolves.toMatchObject({ noteCount: 1 });
@@ -198,7 +232,8 @@ describe('MigrationRuntime', () => {
     const runtime = new MigrationRuntime({
       sessionManager,
       createProvider: () => new FakeProvider('vivo'),
-      checkpoints: new MemoryCheckpoints()
+      checkpoints: new MemoryCheckpoints(),
+      exports: new MemoryExports()
     });
 
     await expect(runtime.getLoginState('vivo')).resolves.toMatchObject({
@@ -233,6 +268,7 @@ describe('MigrationRuntime', () => {
       sessionManager,
       createProvider: () => provider,
       checkpoints: new MemoryCheckpoints(),
+      exports: new MemoryExports(),
       loginPolling: { intervalMs: 0, timeoutMs: 100, sleep: async () => undefined }
     });
 
@@ -241,5 +277,46 @@ describe('MigrationRuntime', () => {
     });
     expect(provider.getLoginState).toHaveBeenCalledTimes(3);
     expect(sessionManager.persist).toHaveBeenCalledWith('xiaomi');
+  });
+
+  it('保存新导出并从本地批次恢复搜索预览和详情', async () => {
+    const page = {} as Page;
+    const exports = new MemoryExports();
+    const sessionManager = {
+      getPage: vi.fn(() => page),
+      open: vi.fn(async () => page),
+      persist: vi.fn(async () => undefined),
+      switchToHeaded: vi.fn(async () => page),
+      switchToHeadless: vi.fn(async () => page),
+      disposeAll: vi.fn(async () => undefined)
+    };
+    const runtime = new MigrationRuntime({
+      sessionManager,
+      createProvider: () => new FakeProvider('xiaomi'),
+      checkpoints: new MemoryCheckpoints(),
+      exports
+    });
+
+    await runtime.scanXiaomi();
+    expect(exports.saves).toBe(1);
+
+    const restored = new MigrationRuntime({
+      sessionManager: { ...sessionManager, getPage: vi.fn(() => null) },
+      createProvider: () => new FakeProvider('xiaomi'),
+      checkpoints: new MemoryCheckpoints(),
+      exports
+    });
+    await expect(restored.getLatestExportSummary()).resolves.toMatchObject({
+      batchId: 'batch-1',
+      noteCount: 1
+    });
+    await expect(
+      restored.getExportPreview({ search: '合成正文', filter: 'all', offset: 0, limit: 50 })
+    ).resolves.toMatchObject({ total: 1, items: [{ sourceId: 'synthetic-1' }] });
+    await expect(restored.getExportPreviewDetail('synthetic-1')).resolves.toMatchObject({
+      title: '合成标题',
+      plainText: '合成正文',
+      attachments: []
+    });
   });
 });
