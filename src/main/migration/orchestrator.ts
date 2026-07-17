@@ -47,26 +47,7 @@ export class MigrationOrchestrator {
   ) {}
 
   async exportFromSource(): Promise<ExportBundle> {
-    const notes: CanonicalNote[] = [];
-    let cursor: string | undefined;
-
-    do {
-      const page = await this.source.listNotes(cursor);
-      for (const summary of page.items) {
-        const note = await this.source.getNote(summary.sourceId);
-        const attachments = await Promise.all(
-          note.attachments.map((attachment) => this.source.downloadAttachment(attachment))
-        );
-        notes.push({ ...note, attachments });
-      }
-      cursor = page.nextCursor ?? undefined;
-    } while (cursor);
-
-    return {
-      notes,
-      warningCount: notes.reduce((count, note) => count + note.warnings.length, 0),
-      attachmentCount: notes.reduce((count, note) => count + note.attachments.length, 0)
-    };
+    return exportProviderNotes(this.source);
   }
 
   confirm(): void {
@@ -132,6 +113,29 @@ export class MigrationOrchestrator {
 
     return report;
   }
+}
+
+export async function exportProviderNotes(source: NotesProvider): Promise<ExportBundle> {
+  const notes: CanonicalNote[] = [];
+  let cursor: string | undefined;
+
+  do {
+    const page = await source.listNotes(cursor);
+    for (const summary of page.items) {
+      const note = await source.getNote(summary.sourceId);
+      const attachments = await Promise.all(
+        note.attachments.map((attachment) => source.downloadAttachment(attachment))
+      );
+      notes.push({ ...note, attachments });
+    }
+    cursor = page.nextCursor ?? undefined;
+  } while (cursor);
+
+  return {
+    notes,
+    warningCount: notes.reduce((count, note) => count + note.warnings.length, 0),
+    attachmentCount: notes.reduce((count, note) => count + note.attachments.length, 0)
+  };
 }
 
 function classifyMigrationError(error: unknown): string {

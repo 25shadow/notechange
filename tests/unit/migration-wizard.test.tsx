@@ -2,10 +2,12 @@
 
 import '@testing-library/jest-dom/vitest';
 
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { App, type RendererMigrationApi } from '../../src/renderer/App';
+
+afterEach(cleanup);
 
 function fakeApi(): RendererMigrationApi {
   return {
@@ -22,6 +24,15 @@ function fakeApi(): RendererMigrationApi {
     })),
     cancelMigration: vi.fn(async () => undefined)
   };
+}
+
+function xiaomiOnlyApi(): RendererMigrationApi {
+  const api = fakeApi();
+  api.getLoginState = vi.fn(async (provider) => ({
+    authenticated: provider === 'xiaomi',
+    accountLabel: null
+  }));
+  return api;
 }
 
 describe('小米到 vivo 迁移工作区', () => {
@@ -50,5 +61,20 @@ describe('小米到 vivo 迁移工作区', () => {
     await waitFor(() => expect(api.confirmMigration).toHaveBeenCalledOnce());
     await waitFor(() => expect(api.startImport).toHaveBeenCalledOnce());
     expect(await screen.findByText('已创建 10 条')).toBeTruthy();
+  });
+
+  it('小米登录后立即允许导出，但 vivo 未登录时禁止导入', async () => {
+    const api = xiaomiOnlyApi();
+    render(<App api={api} />);
+
+    await waitFor(() => expect(screen.getAllByText('已连接')).toHaveLength(1));
+    expect(screen.getByRole('button', { name: '导出小米笔记' })).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: '导出小米笔记' }));
+    await screen.findByLabelText('导出统计');
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: '我已核对目标账号和迁移数量' })
+    );
+
+    expect(screen.getByRole('button', { name: '导入 vivo' })).toBeDisabled();
   });
 });

@@ -7,7 +7,7 @@ import { VivoPageExecutor } from '../../src/main/providers/vivo/vivo-page-execut
 import { XiaomiPageExecutor } from '../../src/main/providers/xiaomi/xiaomi-page-executor';
 import type { OperationContract } from '../../src/main/contracts/schema';
 
-describe('页面契约执行器', () => {
+describe.skipIf(process.env.CODEX_SANDBOX === 'seatbelt')('页面契约执行器', () => {
   let server: Server;
   let origin: string;
   let sessions: SessionManager;

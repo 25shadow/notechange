@@ -82,6 +82,7 @@ describe('MigrationRuntime', () => {
     const sessionManager = {
       getPage: vi.fn(() => null as Page | null),
       open: vi.fn(async () => page),
+      switchToHeadless: vi.fn(async () => page),
       disposeAll: vi.fn(async () => undefined)
     };
     const xiaomi = new FakeProvider('xiaomi');
@@ -105,5 +106,66 @@ describe('MigrationRuntime', () => {
     runtime.confirmMigration();
     await runtime.startImport();
     expect(vivo.writes).toEqual(['synthetic-1']);
+  });
+
+  it('持续检测登录成功并把可见会话切换为无头会话', async () => {
+    const visiblePage = { id: 'visible' } as unknown as Page;
+    const headlessPage = { id: 'headless' } as unknown as Page;
+    const states = [false, false, true, false, true];
+    const provider = new FakeProvider('xiaomi');
+    provider.getLoginState = vi.fn(async () => ({
+      authenticated: states.shift() ?? true,
+      accountLabel: null
+    }));
+    const sessionManager = {
+      getPage: vi.fn(() => null as Page | null),
+      open: vi.fn(async () => visiblePage),
+      switchToHeadless: vi.fn(async () => headlessPage),
+      disposeAll: vi.fn(async () => undefined)
+    };
+    const runtime = new MigrationRuntime({
+      sessionManager,
+      createProvider: () => provider,
+      checkpoints: new MemoryCheckpoints(),
+      loginPolling: { intervalMs: 0, timeoutMs: 100, sleep: async () => undefined }
+    });
+
+    await expect(runtime.startLogin('xiaomi')).resolves.toMatchObject({
+      authenticated: true
+    });
+    expect(provider.getLoginState).toHaveBeenCalledTimes(5);
+    expect(sessionManager.switchToHeadless).toHaveBeenCalledWith(
+      'xiaomi',
+      'https://i.mi.com/note/h5#/'
+    );
+  });
+
+  it('只登录小米即可导出，导入时才要求 vivo 登录', async () => {
+    const xiaomiPage = { id: 'xiaomi' } as unknown as Page;
+    const vivoPage = { id: 'vivo' } as unknown as Page;
+    let vivoConnected = false;
+    const sessionManager = {
+      getPage: vi.fn((provider: string) => {
+        if (provider === 'xiaomi') return xiaomiPage;
+        return vivoConnected ? vivoPage : null;
+      }),
+      open: vi.fn(),
+      switchToHeadless: vi.fn(),
+      disposeAll: vi.fn(async () => undefined)
+    };
+    const xiaomi = new FakeProvider('xiaomi');
+    const vivo = new FakeProvider('vivo');
+    const runtime = new MigrationRuntime({
+      sessionManager,
+      createProvider: (provider) => (provider === 'xiaomi' ? xiaomi : vivo),
+      checkpoints: new MemoryCheckpoints()
+    });
+
+    await expect(runtime.scanXiaomi()).resolves.toMatchObject({ noteCount: 1 });
+    runtime.confirmMigration();
+    await expect(runtime.startImport()).rejects.toThrow('LOGIN_SESSION_MISSING:vivo');
+
+    vivoConnected = true;
+    await expect(runtime.startImport()).resolves.toMatchObject({ created: 1 });
   });
 });

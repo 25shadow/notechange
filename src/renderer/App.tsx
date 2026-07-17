@@ -119,8 +119,9 @@ export function App({ api }: AppProps) {
     }
   };
 
-  const connected = login.xiaomi.authenticated && login.vivo.authenticated;
-  const currentStep = report ? 4 : summary ? 3 : connected ? 2 : 1;
+  const xiaomiConnected = login.xiaomi.authenticated;
+  const vivoConnected = login.vivo.authenticated;
+  const currentStep = report ? 4 : summary ? 3 : xiaomiConnected ? 2 : 1;
 
   return (
     <main className="app-shell">
@@ -188,9 +189,9 @@ export function App({ api }: AppProps) {
         <div className="section-heading">
           <div>
             <h2>迁移批次</h2>
-            <p>{summary ? '小米数据已导出到本地任务，可核对后导入。' : '连接两个账号后导出小米笔记。'}</p>
+            <p>{summary ? '小米数据已导出到本地任务，可核对后导入。' : '连接小米账号后即可导出笔记。'}</p>
           </div>
-          <button className="button secondary" disabled={!connected || scanning} onClick={() => void scan()}>
+          <button className="button secondary" disabled={!xiaomiConnected || scanning} onClick={() => void scan()}>
             {scanning ? <LoaderCircle className="spin" size={17} /> : <Download size={17} />}
             {scanning ? '正在导出' : '导出小米笔记'}
           </button>
@@ -227,7 +228,7 @@ export function App({ api }: AppProps) {
               )}
               <button
                 className="button primary"
-                disabled={!confirmed || importing}
+                disabled={!confirmed || !vivoConnected || importing}
                 onClick={() => void startImport()}
               >
                 {importing ? <LoaderCircle className="spin" size={17} /> : <Upload size={17} />}
@@ -264,7 +265,7 @@ function ProviderPanel({
       <div className="provider-logo" aria-hidden="true">{provider === 'xiaomi' ? 'MI' : 'V'}</div>
       <div className="provider-copy">
         <h2>{name}</h2>
-        <p>{state.accountLabel ?? '当前浏览器会话'}</p>
+        <p>{state.accountLabel ?? (state.authenticated ? '后台会话' : '当前浏览器会话')}</p>
       </div>
       {state.authenticated ? (
         <span className="connected"><CheckCircle2 size={16} />已连接</span>

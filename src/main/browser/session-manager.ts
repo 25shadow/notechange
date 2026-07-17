@@ -8,6 +8,13 @@ type PersistentContextOptions = NonNullable<
   Parameters<typeof chromium.launchPersistentContext>[1]
 >;
 
+export interface PersistentContextLauncher {
+  launchPersistentContext(
+    userDataDirectory: string,
+    options: PersistentContextOptions
+  ): Promise<BrowserContext>;
+}
+
 type ManagedContext = {
   context: BrowserContext;
   userDataDirectory: string;
@@ -18,7 +25,8 @@ export class SessionManager {
 
   constructor(
     private readonly launchOptions: PersistentContextOptions = { headless: false },
-    private readonly rootDirectory = join(tmpdir(), 'notechange-browser')
+    private readonly rootDirectory = join(tmpdir(), 'notechange-browser'),
+    private readonly launcher: PersistentContextLauncher = chromium
   ) {}
 
   async open(provider: string, url: string): Promise<Page> {
@@ -28,13 +36,16 @@ export class SessionManager {
     const userDataDirectory = await mkdtemp(join(this.rootDirectory, `${safeProvider}-`));
 
     try {
-      const context = await chromium.launchPersistentContext(
+      const context = await this.launcher.launchPersistentContext(
         userDataDirectory,
         this.launchOptions
       );
       const page = context.pages()[0] ?? (await context.newPage());
       await page.goto(url, { waitUntil: 'domcontentloaded' });
-      this.contexts.set(provider, { context, userDataDirectory });
+      this.contexts.set(provider, {
+        context,
+        userDataDirectory
+      });
       return page;
     } catch (error) {
       await rm(userDataDirectory, { recursive: true, force: true });
@@ -46,6 +57,33 @@ export class SessionManager {
     const managed = this.contexts.get(provider);
     if (!managed) return null;
     return managed.context.pages()[0] ?? null;
+  }
+
+  async switchToHeadless(provider: string, url: string): Promise<Page> {
+    const managed = this.contexts.get(provider);
+    if (!managed) throw new Error(`LOGIN_SESSION_MISSING:${provider}`);
+
+    const cookies = await managed.context.cookies();
+    this.contexts.delete(provider);
+    await managed.context.close();
+
+    try {
+      const context = await this.launcher.launchPersistentContext(managed.userDataDirectory, {
+        ...this.launchOptions,
+        headless: true
+      });
+      await context.addCookies(cookies);
+      const page = context.pages()[0] ?? (await context.newPage());
+      await page.goto(url, { waitUntil: 'domcontentloaded' });
+      this.contexts.set(provider, {
+        context,
+        userDataDirectory: managed.userDataDirectory
+      });
+      return page;
+    } catch (error) {
+      await rm(managed.userDataDirectory, { recursive: true, force: true });
+      throw error;
+    }
   }
 
   async disposeAll(): Promise<void> {
