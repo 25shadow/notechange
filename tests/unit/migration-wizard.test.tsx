@@ -14,6 +14,10 @@ function fakeApi(): RendererMigrationApi {
     getLoginState: vi.fn(async () => ({ authenticated: true, accountLabel: null })),
     startLogin: vi.fn(async () => ({ authenticated: true, accountLabel: null })),
     scanXiaomi: vi.fn(async () => ({ noteCount: 12, attachmentCount: 4, warningCount: 2 })),
+    getLatestExportSummary: vi.fn(async () => null),
+    getExportPreview: vi.fn(async () => ({ total: 0, items: [] })),
+    getExportPreviewDetail: vi.fn(),
+    getExportAttachment: vi.fn(),
     confirmMigration: vi.fn(async () => undefined),
     startImport: vi.fn(async () => ({
       created: 10,

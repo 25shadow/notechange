@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   Cloud,
   Download,
+  Eye,
   LoaderCircle,
   LogIn,
   Paperclip,
@@ -21,6 +22,8 @@ import type {
   RendererMigrationReport,
   ScanSummary
 } from '../shared/ipc';
+import type { LocalExportSummary } from '../shared/ipc';
+import { ExportPreviewDialog } from './ExportPreviewDialog';
 
 export type RendererMigrationApi = NoteChangeApi;
 
@@ -35,6 +38,14 @@ const unavailableApi: RendererMigrationApi = {
     throw new Error('IPC_UNAVAILABLE');
   },
   scanXiaomi: async () => {
+    throw new Error('IPC_UNAVAILABLE');
+  },
+  getLatestExportSummary: async () => null,
+  getExportPreview: async () => ({ total: 0, items: [] }),
+  getExportPreviewDetail: async () => {
+    throw new Error('IPC_UNAVAILABLE');
+  },
+  getExportAttachment: async () => {
     throw new Error('IPC_UNAVAILABLE');
   },
   confirmMigration: async () => {
@@ -56,7 +67,8 @@ export function App({ api }: AppProps) {
   });
   const [loadingProvider, setLoadingProvider] = useState<CloudProvider | null>(null);
   const [scanning, setScanning] = useState(false);
-  const [summary, setSummary] = useState<ScanSummary | null>(null);
+  const [summary, setSummary] = useState<ScanSummary | LocalExportSummary | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [importing, setImporting] = useState(false);
   const [report, setReport] = useState<RendererMigrationReport | null>(null);
@@ -66,10 +78,14 @@ export function App({ api }: AppProps) {
     let active = true;
     void Promise.all([
       migrationApi.getLoginState('xiaomi'),
-      migrationApi.getLoginState('vivo')
+      migrationApi.getLoginState('vivo'),
+      migrationApi.getLatestExportSummary()
     ])
-      .then(([xiaomi, vivo]) => {
-        if (active) setLogin({ xiaomi, vivo });
+      .then(([xiaomi, vivo, latestExport]) => {
+        if (active) {
+          setLogin({ xiaomi, vivo });
+          if (latestExport) setSummary(latestExport);
+        }
       })
       .catch(() => {
         if (active) setError('无法读取登录状态，请重新连接账号。');
@@ -205,6 +221,13 @@ export function App({ api }: AppProps) {
               <Metric icon={<AlertTriangle size={18} />} label="需处理" value={summary.warningCount} warning />
             </div>
 
+            <div className="preview-command-row">
+              <button className="button secondary" onClick={() => setPreviewOpen(true)}>
+                <Eye size={17} />
+                查看导出内容
+              </button>
+            </div>
+
             <div className="confirmation-row">
               <label>
                 <input
@@ -243,6 +266,13 @@ export function App({ api }: AppProps) {
           </div>
         )}
       </section>
+      {previewOpen && (
+        <ExportPreviewDialog
+          api={migrationApi}
+          summary={'batchId' in (summary ?? {}) ? summary as LocalExportSummary : null}
+          onClose={() => setPreviewOpen(false)}
+        />
+      )}
     </main>
   );
 }
