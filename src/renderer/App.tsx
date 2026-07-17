@@ -114,7 +114,8 @@ export function App({ api }: AppProps) {
     setConfirmed(false);
     setReport(null);
     try {
-      setSummary(await migrationApi.scanXiaomi());
+      const scanned = await migrationApi.scanXiaomi();
+      setSummary((await migrationApi.getLatestExportSummary()) ?? scanned);
     } catch {
       setError('小米笔记导出失败，请检查登录状态后重试。');
     } finally {
