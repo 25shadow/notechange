@@ -13,10 +13,12 @@ import {
   type MigrationCheckpointStore
 } from '../migration/orchestrator';
 import type { NotesProvider } from '../providers/provider';
+import type { BrowserMode } from '../browser/session-manager';
 
 export interface RuntimeSessionManager {
   getPage(provider: string): Page | null;
-  open(provider: string, url: string): Promise<Page>;
+  open(provider: string, url: string, mode?: BrowserMode): Promise<Page>;
+  switchToHeaded(provider: string, url: string): Promise<Page>;
   switchToHeadless(provider: string, url: string): Promise<Page>;
   disposeAll(): Promise<void>;
 }
@@ -52,7 +54,7 @@ export class MigrationRuntime {
   async startLogin(provider: CloudProvider): Promise<RendererLoginState> {
     const page =
       this.options.sessionManager.getPage(provider) ??
-      (await this.options.sessionManager.open(provider, providerUrls[provider]));
+      (await this.options.sessionManager.open(provider, providerUrls[provider], 'headless'));
     const polling = this.options.loginPolling ?? {
       intervalMs: 750,
       timeoutMs: 5 * 60 * 1000
@@ -60,9 +62,16 @@ export class MigrationRuntime {
     const sleep =
       polling.sleep ??
       ((milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds)));
+    const restoredState = await this.options.createProvider(provider, page).getLoginState();
+    if (restoredState.authenticated) return restoredState;
+
+    const headedPage = await this.options.sessionManager.switchToHeaded(
+      provider,
+      providerUrls[provider]
+    );
     await this.waitForAuthentication(
       provider,
-      page,
+      headedPage,
       polling,
       sleep,
       `LOGIN_TIMEOUT:${provider}`
@@ -82,8 +91,9 @@ export class MigrationRuntime {
   }
 
   async getLoginState(provider: CloudProvider): Promise<RendererLoginState> {
-    const page = this.options.sessionManager.getPage(provider);
-    if (!page) return { authenticated: false, accountLabel: null };
+    const page =
+      this.options.sessionManager.getPage(provider) ??
+      (await this.options.sessionManager.open(provider, providerUrls[provider], 'headless'));
     return this.options.createProvider(provider, page).getLoginState();
   }
 
