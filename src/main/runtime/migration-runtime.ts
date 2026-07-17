@@ -18,6 +18,7 @@ import type { BrowserMode } from '../browser/session-manager';
 export interface RuntimeSessionManager {
   getPage(provider: string): Page | null;
   open(provider: string, url: string, mode?: BrowserMode): Promise<Page>;
+  persist(provider: string): Promise<void>;
   switchToHeaded(provider: string, url: string): Promise<Page>;
   switchToHeadless(provider: string, url: string): Promise<Page>;
   disposeAll(): Promise<void>;
@@ -63,7 +64,10 @@ export class MigrationRuntime {
       polling.sleep ??
       ((milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds)));
     const restoredState = await this.options.createProvider(provider, page).getLoginState();
-    if (restoredState.authenticated) return restoredState;
+    if (restoredState.authenticated) {
+      await this.options.sessionManager.persist(provider);
+      return restoredState;
+    }
 
     const headedPage = await this.options.sessionManager.switchToHeaded(
       provider,
@@ -81,20 +85,38 @@ export class MigrationRuntime {
       provider,
       providerUrls[provider]
     );
-    return this.waitForAuthentication(
+    const authenticatedState = await this.waitForAuthentication(
       provider,
       headlessPage,
       polling,
       sleep,
       `LOGIN_SESSION_LOST:${provider}`
     );
+    await this.options.sessionManager.persist(provider);
+    return authenticatedState;
   }
 
   async getLoginState(provider: CloudProvider): Promise<RendererLoginState> {
     const page =
       this.options.sessionManager.getPage(provider) ??
       (await this.options.sessionManager.open(provider, providerUrls[provider], 'headless'));
-    return this.options.createProvider(provider, page).getLoginState();
+    const polling = this.options.loginPolling ?? {
+      intervalMs: 750,
+      timeoutMs: 5 * 60 * 1000
+    };
+    const sleep =
+      polling.sleep ??
+      ((milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds)));
+    let state: RendererLoginState = { authenticated: false, accountLabel: null };
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      state = await this.options.createProvider(provider, page).getLoginState();
+      if (state.authenticated) {
+        await this.options.sessionManager.persist(provider);
+        return state;
+      }
+      if (attempt < 9) await sleep(Math.min(polling.intervalMs, 500));
+    }
+    return state;
   }
 
   async scanXiaomi(): Promise<ScanSummary> {

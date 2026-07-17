@@ -72,6 +72,12 @@ export class SessionManager {
     return managed.context.pages()[0] ?? null;
   }
 
+  async persist(provider: string): Promise<void> {
+    const managed = this.contexts.get(provider);
+    if (!managed) throw new Error(`LOGIN_SESSION_MISSING:${provider}`);
+    await this.saveCookies(managed.userDataDirectory, await managed.context.cookies());
+  }
+
   async switchToHeadless(provider: string, url: string): Promise<Page> {
     return this.switchMode(provider, url, 'headless');
   }

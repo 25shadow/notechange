@@ -18,8 +18,8 @@
       "responseShape": {
         "envelope": { "code": "number", "data": "object", "description": "string", "result": "string", "retriable": "boolean", "ts": "number" },
         "data": { "entries": "array", "folders": "array", "lastPage": "boolean", "syncTag": "string" },
-        "entry": { "alertDate": "number", "alertTag": "number", "colorId": "number", "createDate": "number", "folderId": "number", "id": "string", "modifyDate": "number", "setting": "object", "snippet": "string", "status": "string", "subject": "string", "tag": "string", "type": "string" },
-        "setting": { "data": "array", "stickyTime": "number", "themeId": "number", "version": "number" }
+        "entry": { "alertDate": "number", "alertTag": "number", "colorId": "number", "createDate": "number", "folderId": "number|string|null", "id": "string", "modifyDate": "number", "setting": "object", "snippet": "string", "status": "string", "subject": "string", "tag": "string", "type": "string" },
+        "setting": { "data": "array|undefined", "stickyTime": "number", "themeId": "number", "version": "number" }
       }
     },
     { "name": "syncNotes", "method": "GET", "path": "/note/sync/full/", "queryKeys": ["data", "inactiveTime", "ts"], "verification": "network-verified" },
@@ -32,9 +32,9 @@
       "responseShape": {
         "envelope": { "code": "number", "data": "object", "description": "string", "result": "string", "retriable": "boolean", "ts": "number" },
         "data": { "entry": "object" },
-        "entry": { "alertDate": "number", "alertTag": "number", "colorId": "number", "content": "string", "createDate": "number", "extraInfo": "string", "folderId": "number", "id": "string", "modifyDate": "number", "setting": "object", "snippet": "string", "status": "string", "subject": "string", "tag": "string", "type": "string" },
+        "entry": { "alertDate": "number", "alertTag": "number", "colorId": "number", "content": "string", "createDate": "number", "extraInfo": "string", "folderId": "number|string|null", "id": "string", "modifyDate": "number", "setting": "object", "snippet": "string", "status": "string", "subject": "string", "tag": "string", "type": "string" },
         "attachment": { "digest": "string", "fileId": "string", "mimeType": "string" },
-        "setting": { "data": "array", "stickyTime": "number", "themeId": "number", "version": "number" }
+        "setting": { "data": "array|undefined", "stickyTime": "number", "themeId": "number", "version": "number" }
       }
     },
     { "name": "createNote", "method": "POST", "path": "/note/note", "bodyEncoding": "form", "bodyKeys": ["entry", "serviceToken"], "verification": "network-verified" },

@@ -48,7 +48,10 @@ export class XiaomiProvider implements NotesProvider {
     return {
       items: page.entries.map((entry) => ({
         sourceId: entry.id,
-        folderSourceId: entry.folderId === 0 ? null : String(entry.folderId)
+        folderSourceId:
+          entry.folderId == null || String(entry.folderId) === '0'
+            ? null
+            : String(entry.folderId)
       })),
       nextCursor: page.lastPage ? null : page.syncTag
     };

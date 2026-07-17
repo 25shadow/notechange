@@ -82,6 +82,7 @@ describe('MigrationRuntime', () => {
     const sessionManager = {
       getPage: vi.fn(() => null as Page | null),
       open: vi.fn(async () => page),
+      persist: vi.fn(async () => undefined),
       switchToHeaded: vi.fn(async () => page),
       switchToHeadless: vi.fn(async () => page),
       disposeAll: vi.fn(async () => undefined)
@@ -98,6 +99,7 @@ describe('MigrationRuntime', () => {
     sessionManager.getPage.mockReturnValue(page);
     await runtime.startLogin('xiaomi');
     expect(sessionManager.open).toHaveBeenCalledTimes(1);
+    expect(sessionManager.persist).toHaveBeenCalledWith('xiaomi');
     expect(sessionManager.open).toHaveBeenCalledWith(
       'xiaomi',
       'https://i.mi.com/note/h5#/',
@@ -126,6 +128,7 @@ describe('MigrationRuntime', () => {
     const sessionManager = {
       getPage: vi.fn(() => null as Page | null),
       open: vi.fn(async () => visiblePage),
+      persist: vi.fn(async () => undefined),
       switchToHeaded: vi.fn(async () => visiblePage),
       switchToHeadless: vi.fn(async () => headlessPage),
       disposeAll: vi.fn(async () => undefined)
@@ -161,6 +164,7 @@ describe('MigrationRuntime', () => {
         return vivoConnected ? vivoPage : null;
       }),
       open: vi.fn(),
+      persist: vi.fn(async () => undefined),
       switchToHeaded: vi.fn(),
       switchToHeadless: vi.fn(),
       disposeAll: vi.fn(async () => undefined)
@@ -186,6 +190,7 @@ describe('MigrationRuntime', () => {
     const sessionManager = {
       getPage: vi.fn(() => null as Page | null),
       open: vi.fn(async () => headlessPage),
+      persist: vi.fn(async () => undefined),
       switchToHeaded: vi.fn(),
       switchToHeadless: vi.fn(),
       disposeAll: vi.fn(async () => undefined)
@@ -205,5 +210,36 @@ describe('MigrationRuntime', () => {
       'headless'
     );
     expect(sessionManager.switchToHeaded).not.toHaveBeenCalled();
+    expect(sessionManager.persist).toHaveBeenCalledWith('vivo');
+  });
+
+  it('启动检测会等待页面认证初始化完成', async () => {
+    const headlessPage = { id: 'headless' } as unknown as Page;
+    const states = [false, false, true];
+    const provider = new FakeProvider('xiaomi');
+    provider.getLoginState = vi.fn(async () => ({
+      authenticated: states.shift() ?? true,
+      accountLabel: null
+    }));
+    const sessionManager = {
+      getPage: vi.fn(() => null as Page | null),
+      open: vi.fn(async () => headlessPage),
+      persist: vi.fn(async () => undefined),
+      switchToHeaded: vi.fn(),
+      switchToHeadless: vi.fn(),
+      disposeAll: vi.fn(async () => undefined)
+    };
+    const runtime = new MigrationRuntime({
+      sessionManager,
+      createProvider: () => provider,
+      checkpoints: new MemoryCheckpoints(),
+      loginPolling: { intervalMs: 0, timeoutMs: 100, sleep: async () => undefined }
+    });
+
+    await expect(runtime.getLoginState('xiaomi')).resolves.toMatchObject({
+      authenticated: true
+    });
+    expect(provider.getLoginState).toHaveBeenCalledTimes(3);
+    expect(sessionManager.persist).toHaveBeenCalledWith('xiaomi');
   });
 });

@@ -53,6 +53,38 @@ describe('XiaomiProvider', () => {
     expect(executor.calls[0]?.operation.path).toBe('/note/full/page');
   });
 
+  it('兼容 null 和字符串类型的 folderId', async () => {
+    const contract = parseProviderContract(xiaomiContractJson);
+    const baseEntry = listPageOne.data.entries[0];
+    const provider = new XiaomiProvider(
+      new XiaomiApi(
+        {
+          async call<T>() {
+            return {
+              code: 0,
+              data: {
+                ...listPageOne.data,
+                entries: [
+                  { ...baseEntry, id: 'without-folder', folderId: null },
+                  { ...baseEntry, id: 'string-folder', folderId: 'folder-1' }
+                ],
+                lastPage: true
+              }
+            } as T;
+          }
+        },
+        contract
+      )
+    );
+
+    await expect(provider.listNotes()).resolves.toMatchObject({
+      items: [
+        { sourceId: 'without-folder', folderSourceId: null },
+        { sourceId: 'string-folder', folderSourceId: 'folder-1' }
+      ]
+    });
+  });
+
   it('把正文、时间和图片元数据映射为统一笔记', async () => {
     const { provider } = createProvider();
 
@@ -69,6 +101,30 @@ describe('XiaomiProvider', () => {
     expect(note.attachments[0]).toMatchObject({
       sourceId: 'synthetic-file-1',
       mimeType: 'image/png'
+    });
+  });
+
+  it('无附件笔记缺少 setting.data 时按空数组处理', async () => {
+    const contract = parseProviderContract(xiaomiContractJson);
+    const api = new XiaomiApi(
+      {
+        async call<T>() {
+          return {
+            ...noteResponse,
+            data: {
+              entry: {
+                ...noteResponse.data.entry,
+                setting: { stickyTime: 0, themeId: 0, version: 1 }
+              }
+            }
+          } as T;
+        }
+      },
+      contract
+    );
+
+    await expect(new XiaomiProvider(api).getNote('synthetic-note-1')).resolves.toMatchObject({
+      attachments: []
     });
   });
 

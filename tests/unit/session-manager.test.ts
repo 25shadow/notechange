@@ -143,6 +143,22 @@ describe('SessionManager headless transition', () => {
     expect(firstPage).toBe(secondPage);
     await manager.disposeAll();
   });
+
+  it('认证成功后可立即保存当前会话快照', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'notechange-session-test-'));
+    directories.push(root);
+    const manager = new SessionManager(
+      { headless: false },
+      root,
+      { launchPersistentContext: vi.fn(async () => fakeContext(fakePage())) }
+    );
+
+    await manager.open('xiaomi', 'https://i.mi.com/note/h5#/', 'headless');
+    await manager.persist('xiaomi');
+
+    await expect(stat(join(root, 'xiaomi', 'notechange-session.json'))).resolves.toBeDefined();
+    await manager.disposeAll();
+  });
 });
 
 function fakePage(): Page & { goto: ReturnType<typeof vi.fn> } {

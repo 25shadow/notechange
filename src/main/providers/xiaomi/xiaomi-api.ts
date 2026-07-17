@@ -4,7 +4,7 @@ import { z } from 'zod';
 
 const listEntrySchema = z.object({
   id: z.string(),
-  folderId: z.number(),
+  folderId: z.union([z.number(), z.string(), z.null()]),
   subject: z.string(),
   createDate: z.number(),
   modifyDate: z.number()
@@ -19,7 +19,7 @@ const attachmentEntrySchema = z.object({
 const noteEntrySchema = listEntrySchema.extend({
   content: z.string(),
   encryptInfo: z.unknown().optional(),
-  setting: z.object({ data: z.array(attachmentEntrySchema) })
+  setting: z.object({ data: z.array(attachmentEntrySchema).default([]) })
 });
 
 const listDataSchema = z.object({
@@ -52,7 +52,7 @@ export type XiaomiEnvelope<T> = {
 
 export type XiaomiListEntry = {
   id: string;
-  folderId: number;
+  folderId: number | string | null;
   subject: string;
   createDate: number;
   modifyDate: number;
@@ -160,7 +160,30 @@ export class XiaomiApi {
     value: unknown
   ): z.infer<T> {
     const parsed = schema.safeParse(value);
-    if (!parsed.success) throw new Error(`XIAOMI_RESPONSE_INVALID:${operation}`);
+    if (!parsed.success) {
+      const issues = parsed.error.issues
+        .slice(0, 5)
+        .map((issue) => {
+          const received = valueAtPath(value, issue.path);
+          const receivedType = Array.isArray(received)
+            ? 'array'
+            : received === null
+              ? 'null'
+              : typeof received;
+          return `${issue.path.join('.') || '<root>'}:${issue.code}:${receivedType}`;
+        })
+        .join(',');
+      throw new Error(`XIAOMI_RESPONSE_INVALID:${operation}:${issues}`);
+    }
     return parsed.data;
   }
+}
+
+function valueAtPath(value: unknown, path: PropertyKey[]): unknown {
+  let current = value;
+  for (const key of path) {
+    if (current === null || typeof current !== 'object') return undefined;
+    current = (current as Record<PropertyKey, unknown>)[key];
+  }
+  return current;
 }

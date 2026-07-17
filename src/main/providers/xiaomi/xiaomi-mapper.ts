@@ -7,7 +7,7 @@ export function mapXiaomiNote(entry: XiaomiNoteEntry): CanonicalNote {
   const normalized = normalizeContent(entry.content, {
     title: entry.subject,
     attachmentSha256: attachmentHashes,
-    folderPath: String(entry.folderId)
+    folderPath: entry.folderId == null ? '' : String(entry.folderId)
   });
   const warnings = [...normalized.warnings];
 
@@ -17,7 +17,10 @@ export function mapXiaomiNote(entry: XiaomiNoteEntry): CanonicalNote {
 
   return {
     sourceId: entry.id,
-    folderSourceId: entry.folderId === 0 ? null : String(entry.folderId),
+    folderSourceId:
+      entry.folderId == null || String(entry.folderId) === '0'
+        ? null
+        : String(entry.folderId),
     title: entry.subject,
     html: normalized.html,
     plainText: normalized.plainText,
