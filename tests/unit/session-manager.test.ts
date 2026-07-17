@@ -124,6 +124,25 @@ describe('SessionManager headless transition', () => {
     );
     await manager.disposeAll();
   });
+
+  it('并发打开同一个厂商时只启动一个 Chromium 上下文', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'notechange-session-test-'));
+    directories.push(root);
+    const sharedPage = fakePage();
+    const launcher = {
+      launchPersistentContext: vi.fn(async () => fakeContext(sharedPage))
+    };
+    const manager = new SessionManager({ headless: false }, root, launcher);
+
+    const [firstPage, secondPage] = await Promise.all([
+      manager.open('xiaomi', 'https://i.mi.com/note/h5#/', 'headless'),
+      manager.open('xiaomi', 'https://i.mi.com/note/h5#/', 'headless')
+    ]);
+
+    expect(launcher.launchPersistentContext).toHaveBeenCalledOnce();
+    expect(firstPage).toBe(secondPage);
+    await manager.disposeAll();
+  });
 });
 
 function fakePage(): Page & { goto: ReturnType<typeof vi.fn> } {

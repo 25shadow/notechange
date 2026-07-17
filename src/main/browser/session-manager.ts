@@ -24,6 +24,7 @@ export type BrowserMode = 'headed' | 'headless';
 
 export class SessionManager {
   private readonly contexts = new Map<string, ManagedContext>();
+  private readonly pendingOpens = new Map<string, Promise<Page>>();
 
   constructor(
     private readonly launchOptions: PersistentContextOptions = { headless: false },
@@ -32,6 +33,23 @@ export class SessionManager {
   ) {}
 
   async open(provider: string, url: string, mode: BrowserMode = 'headed'): Promise<Page> {
+    const pending = this.pendingOpens.get(provider);
+    if (pending) return pending;
+
+    const opening = this.openNewContext(provider, url, mode);
+    this.pendingOpens.set(provider, opening);
+    try {
+      return await opening;
+    } finally {
+      if (this.pendingOpens.get(provider) === opening) this.pendingOpens.delete(provider);
+    }
+  }
+
+  private async openNewContext(
+    provider: string,
+    url: string,
+    mode: BrowserMode
+  ): Promise<Page> {
     await this.dispose(provider);
     const safeProvider = provider.replace(/[^a-z0-9_-]/gi, '_');
     const userDataDirectory = join(this.rootDirectory, safeProvider);
@@ -54,6 +72,7 @@ export class SessionManager {
   }
 
   async disposeAll(): Promise<void> {
+    await Promise.allSettled([...this.pendingOpens.values()]);
     await Promise.all([...this.contexts.keys()].map((provider) => this.dispose(provider)));
   }
 
