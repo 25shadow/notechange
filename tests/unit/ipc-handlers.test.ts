@@ -16,6 +16,15 @@ describe('registerMigrationIpc', () => {
       startLogin: vi.fn(async () => ({ authenticated: true, accountLabel: null })),
       scanXiaomi: vi.fn(async () => ({ noteCount: 0, attachmentCount: 0, warningCount: 0 })),
       getLatestExportSummary: vi.fn(async () => null),
+      listExports: vi.fn(async () => []),
+      selectExport: vi.fn(async () => ({
+        batchId: 'batch-1',
+        exportedAt: '2026-07-17T00:00:00.000Z',
+        noteCount: 1,
+        attachmentCount: 0,
+        warningCount: 0
+      })),
+      deleteExport: vi.fn(async () => undefined),
       getExportPreview: vi.fn(async () => ({ total: 0, items: [] })),
       getExportPreviewDetail: vi.fn(),
       getExportAttachment: vi.fn(),
@@ -37,12 +46,21 @@ describe('registerMigrationIpc', () => {
       handlers.get(ipcChannels.startLogin)?.({}, 'unknown')
     ).rejects.toThrow('INVALID_PROVIDER');
 
-    const query = { search: '', filter: 'all', offset: 0, limit: 50 } as const;
+    await handlers.get(ipcChannels.listExports)?.({});
+    expect(runtime.listExports).toHaveBeenCalledOnce();
+    await handlers.get(ipcChannels.selectExport)?.({}, 'batch-1');
+    expect(runtime.selectExport).toHaveBeenCalledWith('batch-1');
+    await handlers.get(ipcChannels.deleteExport)?.({}, 'batch-1');
+    expect(runtime.deleteExport).toHaveBeenCalledWith('batch-1');
+
+    const query = { batchId: 'batch-1', search: '', filter: 'all', offset: 0, limit: 50 } as const;
     await handlers.get(ipcChannels.getExportPreview)?.({}, query);
     expect(runtime.getExportPreview).toHaveBeenCalledWith(query);
-    await handlers.get(ipcChannels.getExportPreviewDetail)?.({}, 'note-1');
-    expect(runtime.getExportPreviewDetail).toHaveBeenCalledWith('note-1');
-    await handlers.get(ipcChannels.getExportAttachment)?.({}, 'note-1', 'a'.repeat(64));
-    expect(runtime.getExportAttachment).toHaveBeenCalledWith('note-1', 'a'.repeat(64));
+    const detailRequest = { batchId: 'batch-1', sourceId: 'note-1' };
+    await handlers.get(ipcChannels.getExportPreviewDetail)?.({}, detailRequest);
+    expect(runtime.getExportPreviewDetail).toHaveBeenCalledWith(detailRequest);
+    const attachmentRequest = { ...detailRequest, sha256: 'a'.repeat(64) };
+    await handlers.get(ipcChannels.getExportAttachment)?.({}, attachmentRequest);
+    expect(runtime.getExportAttachment).toHaveBeenCalledWith(attachmentRequest);
   });
 });

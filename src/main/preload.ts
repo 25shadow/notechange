@@ -13,11 +13,14 @@ const api: NoteChangeApi = {
     ipcRenderer.invoke(ipcChannels.startLogin, provider),
   scanXiaomi: () => ipcRenderer.invoke(ipcChannels.scanXiaomi),
   getLatestExportSummary: () => ipcRenderer.invoke(ipcChannels.getLatestExportSummary),
+  listExports: () => ipcRenderer.invoke(ipcChannels.listExports),
+  selectExport: (batchId) => ipcRenderer.invoke(ipcChannels.selectExport, batchId),
+  deleteExport: (batchId) => ipcRenderer.invoke(ipcChannels.deleteExport, batchId),
   getExportPreview: (query) => ipcRenderer.invoke(ipcChannels.getExportPreview, query),
-  getExportPreviewDetail: (sourceId) =>
-    ipcRenderer.invoke(ipcChannels.getExportPreviewDetail, sourceId),
-  getExportAttachment: (sourceId, sha256) =>
-    ipcRenderer.invoke(ipcChannels.getExportAttachment, sourceId, sha256),
+  getExportPreviewDetail: (request) =>
+    ipcRenderer.invoke(ipcChannels.getExportPreviewDetail, request),
+  getExportAttachment: (request) =>
+    ipcRenderer.invoke(ipcChannels.getExportAttachment, request),
   confirmMigration: () => ipcRenderer.invoke(ipcChannels.confirmMigration),
   startImport: () => ipcRenderer.invoke(ipcChannels.startImport),
   cancelMigration: () => ipcRenderer.invoke(ipcChannels.cancelMigration)

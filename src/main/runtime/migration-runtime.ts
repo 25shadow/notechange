@@ -3,6 +3,8 @@ import type { Page } from 'playwright';
 import type {
   CloudProvider,
   ExportAttachmentData,
+  ExportAttachmentRequest,
+  ExportNoteRequest,
   ExportPreviewDetail,
   ExportPreviewPage,
   ExportPreviewQuery,
@@ -151,9 +153,33 @@ export class MigrationRuntime {
     return stored ? toLocalSummary(stored) : null;
   }
 
+  async listExports(): Promise<LocalExportSummary[]> {
+    return (await this.options.exports.list()).map(toLocalSummary);
+  }
+
+  async selectExport(batchId: string): Promise<LocalExportSummary> {
+    const stored = await this.options.exports.load(batchId);
+    if (!stored) throw new Error('EXPORT_BUNDLE_MISSING');
+    this.storedExport = stored;
+    this.bundle = stored.bundle;
+    this.orchestrator = null;
+    this.confirmed = false;
+    return toLocalSummary(stored);
+  }
+
+  async deleteExport(batchId: string): Promise<void> {
+    await this.options.exports.delete(batchId);
+    if (this.storedExport?.batchId === batchId) {
+      this.storedExport = null;
+      this.bundle = null;
+      this.orchestrator = null;
+      this.confirmed = false;
+    }
+  }
+
   async getExportPreview(query: ExportPreviewQuery): Promise<ExportPreviewPage> {
-    const stored = await this.ensureStoredExport(true);
     validatePreviewQuery(query);
+    const stored = await this.loadStoredExport(query.batchId);
     const search = query.search.trim().toLocaleLowerCase();
     const filtered = stored.bundle.notes.filter((note) => {
       if (query.filter === 'warnings' && note.warnings.length === 0) return false;
@@ -173,9 +199,9 @@ export class MigrationRuntime {
     };
   }
 
-  async getExportPreviewDetail(sourceId: string): Promise<ExportPreviewDetail> {
-    const note = (await this.ensureStoredExport(true)).bundle.notes.find(
-      (candidate) => candidate.sourceId === sourceId
+  async getExportPreviewDetail(request: ExportNoteRequest): Promise<ExportPreviewDetail> {
+    const note = (await this.loadStoredExport(request.batchId)).bundle.notes.find(
+      (candidate) => candidate.sourceId === request.sourceId
     );
     if (!note) throw new Error('EXPORT_NOTE_MISSING');
     return {
@@ -195,12 +221,11 @@ export class MigrationRuntime {
   }
 
   async getExportAttachment(
-    sourceId: string,
-    sha256: string
+    request: ExportAttachmentRequest
   ): Promise<ExportAttachmentData> {
-    const stored = await this.ensureStoredExport(true);
-    const note = stored.bundle.notes.find((candidate) => candidate.sourceId === sourceId);
-    const attachment = note?.attachments.find((candidate) => candidate.sha256 === sha256);
+    const stored = await this.loadStoredExport(request.batchId);
+    const note = stored.bundle.notes.find((candidate) => candidate.sourceId === request.sourceId);
+    const attachment = note?.attachments.find((candidate) => candidate.sha256 === request.sha256);
     if (!attachment) throw new Error('EXPORT_ATTACHMENT_MISSING');
     const bytes = await this.options.exports.readAttachment(
       stored.batchId,
@@ -248,6 +273,12 @@ export class MigrationRuntime {
     }
     if (required && !this.storedExport) throw new Error('EXPORT_BUNDLE_MISSING');
     return this.storedExport;
+  }
+
+  private async loadStoredExport(batchId: string): Promise<StoredExportBundle> {
+    const stored = await this.options.exports.load(batchId);
+    if (!stored) throw new Error('EXPORT_BUNDLE_MISSING');
+    return stored;
   }
 
   private requirePage(provider: CloudProvider): Page {

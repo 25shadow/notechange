@@ -22,6 +22,21 @@ describe('导出笔记预览', () => {
         attachmentCount: 19,
         warningCount: 245
       })),
+      listExports: vi.fn(async () => [{
+        batchId: 'batch-1',
+        exportedAt: '2026-07-17T00:00:00.000Z',
+        noteCount: 318,
+        attachmentCount: 19,
+        warningCount: 245
+      }]),
+      selectExport: vi.fn(async () => ({
+        batchId: 'batch-1',
+        exportedAt: '2026-07-17T00:00:00.000Z',
+        noteCount: 318,
+        attachmentCount: 19,
+        warningCount: 245
+      })),
+      deleteExport: vi.fn(),
       getExportPreview: vi.fn(async (query) => ({
         total: 1,
         items: [{
@@ -50,7 +65,7 @@ describe('导出笔记预览', () => {
     };
     render(<App api={api} />);
 
-    fireEvent.click(await screen.findByRole('button', { name: '查看导出内容' }));
+    fireEvent.click(await screen.findByRole('button', { name: '查看' }));
     expect(await screen.findByRole('dialog', { name: '小米笔记预览' })).toBeVisible();
     expect(await screen.findByText('会议记录')).toBeVisible();
     expect(await screen.findByText(/<img src=x/)).toBeVisible();
@@ -61,7 +76,7 @@ describe('导出笔记预览', () => {
     });
     await waitFor(() =>
       expect(api.getExportPreview).toHaveBeenLastCalledWith(
-        expect.objectContaining({ search: '项目', filter: 'all', offset: 0, limit: 50 })
+        expect.objectContaining({ batchId: 'batch-1', search: '项目', filter: 'all', offset: 0, limit: 50 })
       )
     );
     fireEvent.click(screen.getByRole('button', { name: '关闭预览' }));

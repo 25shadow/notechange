@@ -82,24 +82,37 @@ class MemoryCheckpoints implements MigrationCheckpointStore {
 }
 
 class MemoryExports implements ExportBundleStore {
-  value: StoredExportBundle | null = null;
+  values: StoredExportBundle[] = [];
   saves = 0;
 
   async save(bundle: ExportBundle): Promise<StoredExportBundle> {
     this.saves += 1;
-    this.value = {
-      batchId: 'batch-1',
-      exportedAt: '2026-07-17T00:00:00.000Z',
+    const value = {
+      batchId: `batch-${this.saves}`,
+      exportedAt: `2026-07-17T00:00:0${this.saves}.000Z`,
       noteCount: bundle.notes.length,
       attachmentCount: bundle.attachmentCount,
       warningCount: bundle.warningCount,
       bundle
     };
-    return this.value;
+    this.values.unshift(value);
+    return value;
+  }
+
+  async list() {
+    return [...this.values];
+  }
+
+  async load(batchId: string) {
+    return this.values.find((value) => value.batchId === batchId) ?? null;
   }
 
   async loadLatest() {
-    return this.value;
+    return this.values[0] ?? null;
+  }
+
+  async delete(batchId: string) {
+    this.values = this.values.filter((value) => value.batchId !== batchId);
   }
 
   async readAttachment() {
@@ -311,9 +324,9 @@ describe('MigrationRuntime', () => {
       noteCount: 1
     });
     await expect(
-      restored.getExportPreview({ search: '合成正文', filter: 'all', offset: 0, limit: 50 })
+      restored.getExportPreview({ batchId: 'batch-1', search: '合成正文', filter: 'all', offset: 0, limit: 50 })
     ).resolves.toMatchObject({ total: 1, items: [{ sourceId: 'synthetic-1' }] });
-    await expect(restored.getExportPreviewDetail('synthetic-1')).resolves.toMatchObject({
+    await expect(restored.getExportPreviewDetail({ batchId: 'batch-1', sourceId: 'synthetic-1' })).resolves.toMatchObject({
       title: '合成标题',
       plainText: '合成正文',
       attachments: []
@@ -346,5 +359,70 @@ describe('MigrationRuntime', () => {
     await runtime.getLatestExportSummary();
     runtime.confirmMigration();
     await expect(runtime.startImport()).resolves.toMatchObject({ created: 1 });
+  });
+
+  it('列出并选择指定批次，删除当前批次后清空迁移状态', async () => {
+    const exports = new MemoryExports();
+    await exports.save({ notes: [canonicalNote], attachmentCount: 0, warningCount: 0 });
+    await exports.save({
+      notes: [{ ...canonicalNote, sourceId: 'synthetic-2', title: '第二批标题' }],
+      attachmentCount: 0,
+      warningCount: 0
+    });
+    const runtime = new MigrationRuntime({
+      sessionManager: {
+        getPage: vi.fn(() => null),
+        open: vi.fn(),
+        persist: vi.fn(),
+        switchToHeaded: vi.fn(),
+        switchToHeadless: vi.fn(),
+        disposeAll: vi.fn()
+      },
+      createProvider: () => new FakeProvider('xiaomi'),
+      checkpoints: new MemoryCheckpoints(),
+      exports
+    });
+
+    await expect(runtime.listExports()).resolves.toEqual([
+      expect.objectContaining({ batchId: 'batch-2' }),
+      expect.objectContaining({ batchId: 'batch-1' })
+    ]);
+    await runtime.selectExport('batch-1');
+    await expect(
+      runtime.getExportPreview({
+        batchId: 'batch-1',
+        search: '',
+        filter: 'all',
+        offset: 0,
+        limit: 50
+      })
+    ).resolves.toMatchObject({ total: 1, items: [{ sourceId: 'synthetic-1' }] });
+
+    await runtime.deleteExport('batch-1');
+    expect(() => runtime.confirmMigration()).toThrow('EXPORT_BUNDLE_MISSING');
+    await expect(runtime.listExports()).resolves.toHaveLength(1);
+  });
+
+  it('删除非当前批次不影响已选择批次', async () => {
+    const exports = new MemoryExports();
+    await exports.save({ notes: [canonicalNote], attachmentCount: 0, warningCount: 0 });
+    await exports.save({ notes: [canonicalNote], attachmentCount: 0, warningCount: 0 });
+    const runtime = new MigrationRuntime({
+      sessionManager: {
+        getPage: vi.fn(() => null),
+        open: vi.fn(),
+        persist: vi.fn(),
+        switchToHeaded: vi.fn(),
+        switchToHeadless: vi.fn(),
+        disposeAll: vi.fn()
+      },
+      createProvider: () => new FakeProvider('xiaomi'),
+      checkpoints: new MemoryCheckpoints(),
+      exports
+    });
+
+    await runtime.selectExport('batch-2');
+    await runtime.deleteExport('batch-1');
+    expect(() => runtime.confirmMigration()).not.toThrow();
   });
 });

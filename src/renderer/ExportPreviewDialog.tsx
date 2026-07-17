@@ -48,10 +48,11 @@ export function ExportPreviewDialog({
 
   useEffect(() => {
     let active = true;
+    if (!summary) return;
     setLoading(true);
     setError(false);
     void api
-      .getExportPreview({ search, filter, offset, limit: pageSize })
+      .getExportPreview({ batchId: summary.batchId, search, filter, offset, limit: pageSize })
       .then((nextPage) => {
         if (!active) return;
         setPage(nextPage);
@@ -66,21 +67,21 @@ export function ExportPreviewDialog({
     return () => {
       active = false;
     };
-  }, [api, search, filter, offset]);
+  }, [api, summary, search, filter, offset]);
 
   useEffect(() => {
     let active = true;
     setDetail(null);
-    if (selectedId) {
+    if (selectedId && summary) {
       void api
-        .getExportPreviewDetail(selectedId)
+        .getExportPreviewDetail({ batchId: summary.batchId, sourceId: selectedId })
         .then((nextDetail) => active && setDetail(nextDetail))
         .catch(() => active && setError(true));
     }
     return () => {
       active = false;
     };
-  }, [api, selectedId]);
+  }, [api, selectedId, summary]);
 
   const changeFilter = (next: ExportPreviewFilter) => {
     setFilter(next);
@@ -199,6 +200,7 @@ export function ExportPreviewDialog({
                       <AttachmentPreview
                         key={attachment.sha256}
                         api={api}
+                        batchId={summary?.batchId ?? ''}
                         sourceId={detail.sourceId}
                         attachment={attachment}
                       />
@@ -218,23 +220,25 @@ export function ExportPreviewDialog({
 
 function AttachmentPreview({
   api,
+  batchId,
   sourceId,
   attachment
 }: {
   api: NoteChangeApi;
+  batchId: string;
   sourceId: string;
   attachment: ExportPreviewDetail['attachments'][number];
 }) {
   const [src, setSrc] = useState<string | null>(null);
   useEffect(() => {
     let active = true;
-    void api.getExportAttachment(sourceId, attachment.sha256).then((data) => {
+    void api.getExportAttachment({ batchId, sourceId, sha256: attachment.sha256 }).then((data) => {
       if (active) setSrc(`data:${data.mimeType};base64,${data.base64}`);
     });
     return () => {
       active = false;
     };
-  }, [api, attachment.sha256, sourceId]);
+  }, [api, attachment.sha256, batchId, sourceId]);
   return src ? <img src={src} alt={attachment.filename} /> : <div className="preview-image-loading">正在读取图片</div>;
 }
 

@@ -9,9 +9,8 @@ import {
   Eye,
   LoaderCircle,
   LogIn,
-  Paperclip,
   ShieldCheck,
-  StickyNote,
+  Trash2,
   Upload
 } from 'lucide-react';
 
@@ -19,8 +18,7 @@ import type {
   CloudProvider,
   NoteChangeApi,
   RendererLoginState,
-  RendererMigrationReport,
-  ScanSummary
+  RendererMigrationReport
 } from '../shared/ipc';
 import type { LocalExportSummary } from '../shared/ipc';
 import { ExportPreviewDialog } from './ExportPreviewDialog';
@@ -41,6 +39,13 @@ const unavailableApi: RendererMigrationApi = {
     throw new Error('IPC_UNAVAILABLE');
   },
   getLatestExportSummary: async () => null,
+  listExports: async () => [],
+  selectExport: async () => {
+    throw new Error('IPC_UNAVAILABLE');
+  },
+  deleteExport: async () => {
+    throw new Error('IPC_UNAVAILABLE');
+  },
   getExportPreview: async () => ({ total: 0, items: [] }),
   getExportPreviewDetail: async () => {
     throw new Error('IPC_UNAVAILABLE');
@@ -67,8 +72,11 @@ export function App({ api }: AppProps) {
   });
   const [loadingProvider, setLoadingProvider] = useState<CloudProvider | null>(null);
   const [scanning, setScanning] = useState(false);
-  const [summary, setSummary] = useState<ScanSummary | LocalExportSummary | null>(null);
+  const [exports, setExports] = useState<LocalExportSummary[]>([]);
+  const [selectedExport, setSelectedExport] = useState<LocalExportSummary | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<LocalExportSummary | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [importing, setImporting] = useState(false);
   const [report, setReport] = useState<RendererMigrationReport | null>(null);
@@ -79,12 +87,17 @@ export function App({ api }: AppProps) {
     void Promise.all([
       migrationApi.getLoginState('xiaomi'),
       migrationApi.getLoginState('vivo'),
-      migrationApi.getLatestExportSummary()
+      migrationApi.listExports()
     ])
-      .then(([xiaomi, vivo, latestExport]) => {
+      .then(async ([xiaomi, vivo, localExports]) => {
         if (active) {
           setLogin({ xiaomi, vivo });
-          if (latestExport) setSummary(latestExport);
+          setExports(localExports);
+          const latest = localExports[0] ?? null;
+          if (latest) {
+            await migrationApi.selectExport(latest.batchId);
+            if (active) setSelectedExport(latest);
+          }
         }
       })
       .catch(() => {
@@ -114,12 +127,49 @@ export function App({ api }: AppProps) {
     setConfirmed(false);
     setReport(null);
     try {
-      const scanned = await migrationApi.scanXiaomi();
-      setSummary((await migrationApi.getLatestExportSummary()) ?? scanned);
+      await migrationApi.scanXiaomi();
+      const localExports = await migrationApi.listExports();
+      setExports(localExports);
+      setSelectedExport(localExports[0] ?? null);
     } catch {
       setError('小米笔记导出失败，请检查登录状态后重试。');
     } finally {
       setScanning(false);
+    }
+  };
+
+  const openPreview = async (summary: LocalExportSummary) => {
+    setError(null);
+    try {
+      const selected = await migrationApi.selectExport(summary.batchId);
+      setSelectedExport(selected);
+      setConfirmed(false);
+      setReport(null);
+      setPreviewOpen(true);
+    } catch {
+      setError('无法读取所选本地批次。');
+    }
+  };
+
+  const deleteExport = async () => {
+    if (!deleteTarget) return;
+    setError(null);
+    setDeleting(true);
+    try {
+      await migrationApi.deleteExport(deleteTarget.batchId);
+      const remaining = await migrationApi.listExports();
+      setExports(remaining);
+      if (selectedExport?.batchId === deleteTarget.batchId) {
+        setSelectedExport(null);
+        setConfirmed(false);
+        setReport(null);
+        setPreviewOpen(false);
+      }
+      setDeleteTarget(null);
+    } catch {
+      setError('本地批次删除失败，请确认文件未被其他程序占用。');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -138,7 +188,7 @@ export function App({ api }: AppProps) {
 
   const xiaomiConnected = login.xiaomi.authenticated;
   const vivoConnected = login.vivo.authenticated;
-  const currentStep = report ? 4 : summary ? 3 : xiaomiConnected ? 2 : 1;
+  const currentStep = report ? 4 : selectedExport ? 3 : xiaomiConnected ? 2 : 1;
 
   return (
     <main className="app-shell">
@@ -206,7 +256,7 @@ export function App({ api }: AppProps) {
         <div className="section-heading">
           <div>
             <h2>迁移批次</h2>
-            <p>{summary ? '小米数据已导出到本地任务，可核对后导入。' : '连接小米账号后即可导出笔记。'}</p>
+            <p>{exports.length ? '选择一个本地批次查看、删除或导入。' : '连接小米账号后即可导出笔记。'}</p>
           </div>
           <button className="button secondary" disabled={!xiaomiConnected || scanning} onClick={() => void scan()}>
             {scanning ? <LoaderCircle className="spin" size={17} /> : <Download size={17} />}
@@ -214,22 +264,33 @@ export function App({ api }: AppProps) {
           </button>
         </div>
 
-        {summary ? (
+        {exports.length ? (
           <div className="preview-area">
-            <div className="metrics" aria-label="导出统计">
-              <Metric icon={<StickyNote size={18} />} label="笔记" value={summary.noteCount} />
-              <Metric icon={<Paperclip size={18} />} label="图片附件" value={summary.attachmentCount} />
-              <Metric icon={<AlertTriangle size={18} />} label="需处理" value={summary.warningCount} warning />
-            </div>
+            <table className="export-table" aria-label="本地导出批次">
+              <thead><tr><th>导出时间</th><th>笔记</th><th>附件</th><th>需处理</th><th>操作</th></tr></thead>
+              <tbody>
+                {exports.map((summary) => (
+                  <tr key={summary.batchId} className={selectedExport?.batchId === summary.batchId ? 'selected' : ''}>
+                    <td data-label="导出时间">{formatDate(summary.exportedAt)}</td>
+                    <td data-label="笔记">{summary.noteCount}</td>
+                    <td data-label="附件">{summary.attachmentCount}</td>
+                    <td data-label="需处理" className={summary.warningCount ? 'warning-count' : ''}>{summary.warningCount}</td>
+                    <td data-label="操作">
+                      <div className="export-actions">
+                        <button className="button compact secondary" onClick={() => void openPreview(summary)}>
+                          <Eye size={15} />查看
+                        </button>
+                        <button className="button compact danger" aria-label={`删除批次 ${summary.batchId}`} onClick={() => setDeleteTarget(summary)}>
+                          <Trash2 size={15} />删除
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
 
-            <div className="preview-command-row">
-              <button className="button secondary" onClick={() => setPreviewOpen(true)}>
-                <Eye size={17} />
-                查看导出内容
-              </button>
-            </div>
-
-            <div className="confirmation-row">
+            {selectedExport ? <><div className="confirmation-row">
               <label>
                 <input
                   type="checkbox"
@@ -258,7 +319,7 @@ export function App({ api }: AppProps) {
                 {importing ? <LoaderCircle className="spin" size={17} /> : <Upload size={17} />}
                 {importing ? '正在导入' : '导入 vivo'}
               </button>
-            </div>
+            </div></> : <div className="batch-selection-hint">选择“查看”后可核对并导入该批次</div>}
           </div>
         ) : (
           <div className="empty-state">
@@ -270,8 +331,16 @@ export function App({ api }: AppProps) {
       {previewOpen && (
         <ExportPreviewDialog
           api={migrationApi}
-          summary={'batchId' in (summary ?? {}) ? summary as LocalExportSummary : null}
+          summary={selectedExport}
           onClose={() => setPreviewOpen(false)}
+        />
+      )}
+      {deleteTarget && (
+        <DeleteExportDialog
+          summary={deleteTarget}
+          deleting={deleting}
+          onCancel={() => !deleting && setDeleteTarget(null)}
+          onConfirm={() => void deleteExport()}
         />
       )}
     </main>
@@ -309,22 +378,48 @@ function ProviderPanel({
   );
 }
 
-function Metric({
-  icon,
-  label,
-  value,
-  warning = false
+function DeleteExportDialog({
+  summary,
+  deleting,
+  onCancel,
+  onConfirm
 }: {
-  icon: React.ReactNode;
-  label: string;
-  value: number;
-  warning?: boolean;
+  summary: LocalExportSummary;
+  deleting: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
 }) {
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !deleting) onCancel();
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [deleting, onCancel]);
+
   return (
-    <div className={`metric ${warning ? 'metric-warning' : ''}`}>
-      <span className="metric-icon">{icon}</span>
-      <span className="metric-value">{value}</span>
-      <span className="metric-label">{label}</span>
+    <div className="confirm-overlay" role="presentation">
+      <section className="confirm-dialog" role="dialog" aria-modal="true" aria-label="删除本地导出批次">
+        <div className="confirm-danger-icon"><Trash2 size={20} /></div>
+        <div>
+          <h2>删除这个本地批次？</h2>
+          <p>{formatDate(summary.exportedAt)} · {summary.noteCount} 条笔记 · {summary.attachmentCount} 个附件</p>
+        </div>
+        <div className="confirm-warning">只会删除 NoteChange 本地保存的这批导出文件，不会删除小米云端笔记或 vivo 笔记。</div>
+        <div className="confirm-actions">
+          <button className="button secondary" disabled={deleting} onClick={onCancel}>取消</button>
+          <button className="button danger solid" disabled={deleting} onClick={onConfirm}>
+            {deleting ? <LoaderCircle className="spin" size={16} /> : <Trash2 size={16} />}
+            {deleting ? '正在删除' : '删除本地批次'}
+          </button>
+        </div>
+      </section>
     </div>
   );
+}
+
+function formatDate(value: string): string {
+  return new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'
+  }).format(new Date(value));
 }

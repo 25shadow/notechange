@@ -19,11 +19,15 @@ export type LocalExportSummary = ScanSummary & {
 export type ExportPreviewFilter = 'all' | 'warnings' | 'attachments';
 
 export type ExportPreviewQuery = {
+  batchId: string;
   search: string;
   filter: ExportPreviewFilter;
   offset: number;
   limit: number;
 };
+
+export type ExportNoteRequest = { batchId: string; sourceId: string };
+export type ExportAttachmentRequest = ExportNoteRequest & { sha256: string };
 
 export type ExportPreviewItem = {
   sourceId: string;
@@ -62,9 +66,12 @@ export interface NoteChangeApi {
   startLogin(provider: CloudProvider): Promise<RendererLoginState>;
   scanXiaomi(): Promise<ScanSummary>;
   getLatestExportSummary(): Promise<LocalExportSummary | null>;
+  listExports(): Promise<LocalExportSummary[]>;
+  selectExport(batchId: string): Promise<LocalExportSummary>;
+  deleteExport(batchId: string): Promise<void>;
   getExportPreview(query: ExportPreviewQuery): Promise<ExportPreviewPage>;
-  getExportPreviewDetail(sourceId: string): Promise<ExportPreviewDetail>;
-  getExportAttachment(sourceId: string, sha256: string): Promise<ExportAttachmentData>;
+  getExportPreviewDetail(request: ExportNoteRequest): Promise<ExportPreviewDetail>;
+  getExportAttachment(request: ExportAttachmentRequest): Promise<ExportAttachmentData>;
   confirmMigration(): Promise<void>;
   startImport(): Promise<RendererMigrationReport>;
   cancelMigration(): Promise<void>;
@@ -75,6 +82,9 @@ export const ipcChannels = {
   startLogin: 'notechange:start-login',
   scanXiaomi: 'notechange:scan-xiaomi',
   getLatestExportSummary: 'notechange:get-latest-export-summary',
+  listExports: 'notechange:list-exports',
+  selectExport: 'notechange:select-export',
+  deleteExport: 'notechange:delete-export',
   getExportPreview: 'notechange:get-export-preview',
   getExportPreviewDetail: 'notechange:get-export-preview-detail',
   getExportAttachment: 'notechange:get-export-attachment',
