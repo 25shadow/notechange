@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { app, BrowserWindow, ipcMain } from 'electron';
 
 import { SessionManager } from './browser/session-manager';
+import { browserProfileRoot } from './browser/profile-root';
 import { registerMigrationIpc } from './runtime/ipc-handlers';
 import { MigrationRuntime } from './runtime/migration-runtime';
 import { createProvider } from './runtime/provider-factory';
@@ -32,7 +33,10 @@ function createWindow(): void {
 
 app.whenReady().then(() => {
   migrationRuntime = new MigrationRuntime({
-    sessionManager: new SessionManager(),
+    sessionManager: new SessionManager(
+      { headless: false },
+      browserProfileRoot(app.getPath('userData'))
+    ),
     createProvider,
     checkpoints: new MemoryMigrationCheckpointStore()
   });
