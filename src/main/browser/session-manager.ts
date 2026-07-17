@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -20,6 +20,8 @@ type ManagedContext = {
   userDataDirectory: string;
 };
 
+export type BrowserMode = 'headed' | 'headless';
+
 export class SessionManager {
   private readonly contexts = new Map<string, ManagedContext>();
 
@@ -29,28 +31,12 @@ export class SessionManager {
     private readonly launcher: PersistentContextLauncher = chromium
   ) {}
 
-  async open(provider: string, url: string): Promise<Page> {
+  async open(provider: string, url: string, mode: BrowserMode = 'headed'): Promise<Page> {
     await this.dispose(provider);
-    await mkdir(this.rootDirectory, { recursive: true });
     const safeProvider = provider.replace(/[^a-z0-9_-]/gi, '_');
-    const userDataDirectory = await mkdtemp(join(this.rootDirectory, `${safeProvider}-`));
-
-    try {
-      const context = await this.launcher.launchPersistentContext(
-        userDataDirectory,
-        this.launchOptions
-      );
-      const page = context.pages()[0] ?? (await context.newPage());
-      await page.goto(url, { waitUntil: 'domcontentloaded' });
-      this.contexts.set(provider, {
-        context,
-        userDataDirectory
-      });
-      return page;
-    } catch (error) {
-      await rm(userDataDirectory, { recursive: true, force: true });
-      throw error;
-    }
+    const userDataDirectory = join(this.rootDirectory, safeProvider);
+    await mkdir(userDataDirectory, { recursive: true });
+    return this.launch(provider, url, userDataDirectory, mode);
   }
 
   getPage(provider: string): Page | null {
@@ -60,34 +46,52 @@ export class SessionManager {
   }
 
   async switchToHeadless(provider: string, url: string): Promise<Page> {
+    return this.switchMode(provider, url, 'headless');
+  }
+
+  async switchToHeaded(provider: string, url: string): Promise<Page> {
+    return this.switchMode(provider, url, 'headed');
+  }
+
+  async disposeAll(): Promise<void> {
+    await Promise.all([...this.contexts.keys()].map((provider) => this.dispose(provider)));
+  }
+
+  private async switchMode(provider: string, url: string, mode: BrowserMode): Promise<Page> {
     const managed = this.contexts.get(provider);
     if (!managed) throw new Error(`LOGIN_SESSION_MISSING:${provider}`);
 
     const cookies = await managed.context.cookies();
     this.contexts.delete(provider);
     await managed.context.close();
+    return this.launch(provider, url, managed.userDataDirectory, mode, cookies);
+  }
 
+  private async launch(
+    provider: string,
+    url: string,
+    userDataDirectory: string,
+    mode: BrowserMode,
+    cookies: Awaited<ReturnType<BrowserContext['cookies']>> = []
+  ): Promise<Page> {
+    let context: BrowserContext | null = null;
     try {
-      const context = await this.launcher.launchPersistentContext(managed.userDataDirectory, {
+      context = await this.launcher.launchPersistentContext(userDataDirectory, {
         ...this.launchOptions,
-        headless: true
+        headless: mode === 'headless'
       });
       await context.addCookies(cookies);
       const page = context.pages()[0] ?? (await context.newPage());
       await page.goto(url, { waitUntil: 'domcontentloaded' });
       this.contexts.set(provider, {
         context,
-        userDataDirectory: managed.userDataDirectory
+        userDataDirectory
       });
       return page;
     } catch (error) {
-      await rm(managed.userDataDirectory, { recursive: true, force: true });
+      await context?.close().catch(() => undefined);
       throw error;
     }
-  }
-
-  async disposeAll(): Promise<void> {
-    await Promise.all([...this.contexts.keys()].map((provider) => this.dispose(provider)));
   }
 
   private async dispose(provider: string): Promise<void> {
@@ -95,6 +99,5 @@ export class SessionManager {
     if (!managed) return;
     this.contexts.delete(provider);
     await managed.context.close();
-    await rm(managed.userDataDirectory, { recursive: true, force: true });
   }
 }

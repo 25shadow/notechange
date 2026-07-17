@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -60,6 +60,68 @@ describe('SessionManager headless transition', () => {
       headlessPage.goto.mock.invocationCallOrder[0]
     );
 
+    await manager.disposeAll();
+  });
+
+  it('跨上下文复用同一个厂商 profile 且退出时不删除', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'notechange-session-test-'));
+    directories.push(root);
+    const launcher = {
+      launchPersistentContext: vi
+        .fn()
+        .mockResolvedValueOnce(fakeContext(fakePage()))
+        .mockResolvedValueOnce(fakeContext(fakePage()))
+    };
+    const manager = new SessionManager({ headless: false }, root, launcher);
+
+    await manager.open('xiaomi', 'https://i.mi.com/note/h5#/');
+    await manager.disposeAll();
+    await manager.open('xiaomi', 'https://i.mi.com/note/h5#/');
+
+    expect(launcher.launchPersistentContext.mock.calls[0][0]).toBe(join(root, 'xiaomi'));
+    expect(launcher.launchPersistentContext.mock.calls[1][0]).toBe(join(root, 'xiaomi'));
+    await manager.disposeAll();
+    await expect(stat(join(root, 'xiaomi'))).resolves.toBeDefined();
+  });
+
+  it('为小米和 vivo 使用相互隔离的 profile', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'notechange-session-test-'));
+    directories.push(root);
+    const launcher = {
+      launchPersistentContext: vi
+        .fn()
+        .mockResolvedValueOnce(fakeContext(fakePage()))
+        .mockResolvedValueOnce(fakeContext(fakePage()))
+    };
+    const manager = new SessionManager({ headless: false }, root, launcher);
+
+    await manager.open('xiaomi', 'https://i.mi.com/note/h5#/');
+    await manager.open('vivo', 'https://pc.vivo.com.cn/suite#/note');
+
+    expect(launcher.launchPersistentContext.mock.calls[0][0]).toBe(join(root, 'xiaomi'));
+    expect(launcher.launchPersistentContext.mock.calls[1][0]).toBe(join(root, 'vivo'));
+    await manager.disposeAll();
+  });
+
+  it('使用同一个 profile 从 headless 切换到 headed', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'notechange-session-test-'));
+    directories.push(root);
+    const launcher = {
+      launchPersistentContext: vi
+        .fn()
+        .mockResolvedValueOnce(fakeContext(fakePage()))
+        .mockResolvedValueOnce(fakeContext(fakePage()))
+    };
+    const manager = new SessionManager({ headless: false }, root, launcher);
+
+    await manager.open('vivo', 'https://pc.vivo.com.cn/suite#/note', 'headless');
+    await manager.switchToHeaded('vivo', 'https://pc.vivo.com.cn/suite#/note');
+
+    expect(launcher.launchPersistentContext.mock.calls[0][1]).toMatchObject({ headless: true });
+    expect(launcher.launchPersistentContext.mock.calls[1][1]).toMatchObject({ headless: false });
+    expect(launcher.launchPersistentContext.mock.calls[1][0]).toBe(
+      launcher.launchPersistentContext.mock.calls[0][0]
+    );
     await manager.disposeAll();
   });
 });
