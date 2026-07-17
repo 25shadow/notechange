@@ -57,6 +57,39 @@ describe.skipIf(process.env.CODEX_SANDBOX === 'seatbelt')('SessionManager', () =
       authenticated: true
     });
   });
+
+  it('关闭应用上下文后从固定 profile 恢复会话 Cookie', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'notechange-persistent-session-'));
+    const firstManager = new SessionManager({ headless: true }, root);
+    const secondManager = new SessionManager({ headless: true }, root);
+
+    try {
+      const firstPage = await firstManager.open('xiaomi', 'about:blank', 'headless');
+      await firstPage.context().addCookies([
+        {
+          name: 'session',
+          value: 'persistent-test-secret',
+          url: 'https://notechange.test',
+          httpOnly: true,
+          sameSite: 'Lax'
+        }
+      ]);
+      await firstManager.disposeAll();
+
+      const restoredPage = await secondManager.open('xiaomi', 'about:blank', 'headless');
+      await expect(restoredPage.context().cookies('https://notechange.test')).resolves.toEqual([
+        expect.objectContaining({
+          name: 'session',
+          value: 'persistent-test-secret',
+          httpOnly: true
+        })
+      ]);
+    } finally {
+      await firstManager.disposeAll();
+      await secondManager.disposeAll();
+      await rm(root, { recursive: true, force: true });
+    }
+  }, 15_000);
 });
 
 async function routeTestOrigin(page: import('playwright').Page) {
@@ -73,3 +106,6 @@ async function routeTestOrigin(page: import('playwright').Page) {
     await route.fulfill({ status: 200, contentType: 'text/html', body: '<title>local</title>' });
   });
 }
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';

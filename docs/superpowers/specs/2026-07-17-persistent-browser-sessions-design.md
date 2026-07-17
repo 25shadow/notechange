@@ -4,7 +4,7 @@
 
 小米和 vivo 各自使用固定的 Chromium profile。用户完成一次登录后，应用重启或浏览器上下文重建时优先在无头模式恢复登录态；只有厂商会话失效时才重新显示登录窗口。
 
-本功能不保存账号密码、不导出 Cookie 到应用自定义文件，也不增加本地加密层。Cookie、localStorage 和站点数据库均由 Chromium 原生 profile 管理。
+本功能不保存账号密码，也不增加本地加密层。localStorage 和站点数据库由 Chromium 原生 profile 管理。由于 Chromium 关闭时会清除没有过期时间的 session Cookie，应用在各厂商 profile 内以仅当前用户可读写的 JSON 文件保存 Cookie 快照，并在下次 headless 启动时恢复。
 
 ## 目录与隔离
 
@@ -43,7 +43,7 @@ Electron 主进程在 `app.getPath('userData')` 下创建 `browser-profiles` 根
 - `open` 支持明确选择 headed 或 headless 启动模式。
 - 增加从 headless 切换到 headed 的能力，并继续复用同一 profile。
 - `switchToHeadless` 保持现有内存 Cookie 迁移，处理 Chromium 尚未完成落盘的情况。
-- `dispose` 和 `disposeAll` 只关闭上下文，不删除 profile。
+- `dispose` 和 `disposeAll` 在关闭上下文前原子保存 Cookie 快照，不删除 profile。
 - 启动失败时关闭已创建的上下文并释放锁，但不清除历史 profile。
 
 ### MigrationRuntime
@@ -79,6 +79,6 @@ Electron 主进程在 `app.getPath('userData')` 下创建 `browser-profiles` 根
 ## 非目标
 
 - 不实现多账号 profile 切换。
-- 不提供导出、查看或编辑 Cookie 的功能。
+- 不在 UI 提供导出、查看或编辑 Cookie 的功能。
 - 不自动填写账号密码或绕过短信、二维码及二次验证。
 - 不增加“清除登录数据”界面；需要时可作为独立功能设计。

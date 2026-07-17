@@ -1,4 +1,4 @@
-import { mkdir } from 'node:fs/promises';
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -21,6 +21,15 @@ type ManagedContext = {
 };
 
 export type BrowserMode = 'headed' | 'headless';
+
+type BrowserCookies = Awaited<ReturnType<BrowserContext['cookies']>>;
+
+type StoredSession = {
+  version: 1;
+  cookies: BrowserCookies;
+};
+
+const sessionFileName = 'notechange-session.json';
 
 export class SessionManager {
   private readonly contexts = new Map<string, ManagedContext>();
@@ -81,6 +90,7 @@ export class SessionManager {
     if (!managed) throw new Error(`LOGIN_SESSION_MISSING:${provider}`);
 
     const cookies = await managed.context.cookies();
+    await this.saveCookies(managed.userDataDirectory, cookies);
     this.contexts.delete(provider);
     await managed.context.close();
     return this.launch(provider, url, managed.userDataDirectory, mode, cookies);
@@ -91,7 +101,7 @@ export class SessionManager {
     url: string,
     userDataDirectory: string,
     mode: BrowserMode,
-    cookies: Awaited<ReturnType<BrowserContext['cookies']>> = []
+    cookies?: BrowserCookies
   ): Promise<Page> {
     let context: BrowserContext | null = null;
     try {
@@ -99,7 +109,7 @@ export class SessionManager {
         ...this.launchOptions,
         headless: mode === 'headless'
       });
-      await context.addCookies(cookies);
+      await context.addCookies(cookies ?? (await this.loadCookies(userDataDirectory)));
       const page = context.pages()[0] ?? (await context.newPage());
       await page.goto(url, { waitUntil: 'domcontentloaded' });
       this.contexts.set(provider, {
@@ -117,6 +127,35 @@ export class SessionManager {
     const managed = this.contexts.get(provider);
     if (!managed) return;
     this.contexts.delete(provider);
-    await managed.context.close();
+    try {
+      await this.saveCookies(managed.userDataDirectory, await managed.context.cookies());
+    } finally {
+      await managed.context.close();
+    }
+  }
+
+  private async loadCookies(userDataDirectory: string): Promise<BrowserCookies> {
+    try {
+      const stored = JSON.parse(
+        await readFile(join(userDataDirectory, sessionFileName), 'utf8')
+      ) as Partial<StoredSession>;
+      return stored.version === 1 && Array.isArray(stored.cookies) ? stored.cookies : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private async saveCookies(
+    userDataDirectory: string,
+    cookies: BrowserCookies
+  ): Promise<void> {
+    const sessionFile = join(userDataDirectory, sessionFileName);
+    const temporaryFile = `${sessionFile}.${process.pid}.tmp`;
+    const stored: StoredSession = { version: 1, cookies };
+    await writeFile(temporaryFile, JSON.stringify(stored), {
+      encoding: 'utf8',
+      mode: 0o600
+    });
+    await rename(temporaryFile, sessionFile);
   }
 }
