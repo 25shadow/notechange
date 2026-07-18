@@ -13,7 +13,8 @@ import type {
   ExportPreviewFilter,
   ExportPreviewPage,
   LocalExportSummary,
-  NoteChangeApi
+  NoteChangeApi,
+  RendererMigrationReport
 } from '../shared/ipc';
 import { splitInlineAttachments } from './inline-attachments';
 
@@ -22,11 +23,15 @@ const pageSize = 50;
 export function ExportPreviewDialog({
   api,
   summary,
-  onClose
+  onClose,
+  vivoAuthenticated,
+  onRequestImport
 }: {
   api: NoteChangeApi;
   summary: LocalExportSummary | null;
   onClose: () => void;
+  vivoAuthenticated: boolean;
+  onRequestImport: () => Promise<RendererMigrationReport>;
 }) {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<ExportPreviewFilter>('all');
@@ -37,13 +42,8 @@ export function ExportPreviewDialog({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [importPickerOpen, setImportPickerOpen] = useState(false);
-  const [vivoLogin, setVivoLogin] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<string | null>(null);
-
-  useEffect(() => {
-    void api.getLoginState('vivo').then((state) => setVivoLogin(state.authenticated)).catch(() => setVivoLogin(false));
-  }, [api]);
 
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => {
@@ -208,10 +208,10 @@ export function ExportPreviewDialog({
           <section className="confirm-dialog picker-dialog" role="dialog" aria-modal="true" aria-label="选择导入平台">
             <div><h2>选择导入平台</h2><p>将当前小米笔记导入到目标云服务</p></div>
             <div className="picker-options">
-              <button className="button secondary" disabled={!vivoLogin || importing} onClick={() => {
+              <button className="button secondary" disabled={!vivoAuthenticated || importing} onClick={() => {
                 setImporting(true); setImportResult(null);
-                void Promise.resolve(api.confirmMigration()).then(() => api.startImport()).then((result) => {
-                  setImportResult(`导入完成：新增 ${result.created} 条，跳过 ${result.skipped} 条`);
+                void onRequestImport().then((result) => {
+                  setImportResult(formatImportReport(result));
                 }).catch(() => setImportResult('导入失败，请检查 vivo 登录状态')).finally(() => setImporting(false));
               }}>{importing ? '正在导入' : 'vivo 原子笔记'}</button>
               <button className="button secondary" disabled>小米云笔记（暂未支持）</button>
@@ -313,4 +313,11 @@ function AttachmentPreview({
 function formatDate(value: string | null): string {
   if (!value) return '未知时间';
   return new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
+}
+
+function formatImportReport(report: RendererMigrationReport): string {
+  if (report.cancelled) return `导入已取消：新增 ${report.created} 条，跳过 ${report.skipped} 条`;
+  if (report.failed > 0) return `导入完成但有失败：新增 ${report.created} 条，失败 ${report.failed} 条，跳过 ${report.skipped} 条`;
+  if (report.manualReview > 0) return `导入完成，${report.manualReview} 条需人工处理：新增 ${report.created} 条，跳过 ${report.skipped} 条`;
+  return `导入完成：新增 ${report.created} 条，跳过 ${report.skipped} 条`;
 }

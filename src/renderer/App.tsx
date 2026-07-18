@@ -139,6 +139,22 @@ export function App({ api }: AppProps) {
   };
 
   const xiaomiConnected = login.xiaomi.authenticated;
+  const importToVivo = async () => {
+    setError(null);
+    try {
+      await migrationApi.confirmMigration();
+      const report = await migrationApi.startImport();
+      if (report.cancelled) log('导入已取消');
+      else if (report.failed > 0) { log(`导入完成但有失败：${report.failed} 条`, 'error'); setError(`导入完成但有 ${report.failed} 条失败。`); }
+      else if (report.manualReview > 0) log(`导入完成，${report.manualReview} 条需人工处理`, 'info');
+      else log(`导入成功：新增 ${report.created} 条`, 'success');
+      return report;
+    } catch (cause) {
+      log('导入失败', 'error');
+      setError('导入失败，请检查 vivo 登录状态后重试。');
+      throw cause;
+    }
+  };
 
   return (
     <main className="app-shell">
@@ -177,7 +193,7 @@ export function App({ api }: AppProps) {
         </div> : <div className="empty-state"><Download size={22} /><span>尚未生成导出批次</span></div>}
       </section>
 
-      {previewOpen && selectedExport && <ExportPreviewDialog api={migrationApi} summary={selectedExport} onClose={() => setPreviewOpen(false)} />}
+      {previewOpen && selectedExport && <ExportPreviewDialog api={migrationApi} summary={selectedExport} vivoAuthenticated={login.vivo.authenticated} onRequestImport={importToVivo} onClose={() => setPreviewOpen(false)} />}
       {deleteTarget && <DeleteExportDialog summary={deleteTarget} deleting={deleting} onCancel={() => !deleting && setDeleteTarget(null)} onConfirm={() => void deleteExport()} />}
       {exportPickerOpen && <ExportPickerDialog xiaomiConnected={xiaomiConnected} scanning={scanning} onCancel={() => setExportPickerOpen(false)} onExportXiaomi={() => void scan()} />}
     </main>
