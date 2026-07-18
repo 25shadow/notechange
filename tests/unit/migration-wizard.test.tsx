@@ -71,6 +71,18 @@ describe('小米到 vivo 迁移工作区', () => {
     expect(within(statistics).queryByText('需处理')).toBeNull();
     expect(screen.queryByRole('checkbox', { name: '我已核对目标账号和迁移数量' })).toBeNull();
     expect(screen.getByText('小米笔记导出成功')).toBeVisible();
+    expect(screen.getByRole('button', { name: '重新登录小米云笔记' })).toBeVisible();
+    expect(screen.getAllByRole('log').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('未登录时导出按钮仍可打开选择器，但小米选项禁用', async () => {
+    const api = fakeApi();
+    api.getLoginState = vi.fn(async () => ({ authenticated: false, accountLabel: null }));
+    render(<App api={api} />);
+    await waitFor(() => expect(screen.getByRole('button', { name: '登录vivo 原子笔记' })).toBeVisible());
+    fireEvent.click(screen.getByRole('button', { name: '导出笔记' }));
+    expect(screen.getByRole('dialog', { name: '选择导出平台' })).toBeVisible();
+    expect(screen.getByRole('button', { name: '小米云笔记' })).toBeDisabled();
   });
 
   it('小米登录后立即允许导出，但 vivo 未登录时禁止导入', async () => {

@@ -23,6 +23,7 @@ export type RendererMigrationApi = NoteChangeApi;
 type AppProps = {
   api?: RendererMigrationApi;
 };
+type LogEntry = { message: string; time: string; kind: 'success' | 'error' | 'info' };
 
 const disconnected: RendererLoginState = { authenticated: false, accountLabel: null };
 const unavailableApi: RendererMigrationApi = {
@@ -71,9 +72,9 @@ export function App({ api }: AppProps) {
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [exportPickerOpen, setExportPickerOpen] = useState(false);
-  const [logs, setLogs] = useState<string[]>(['应用已启动']);
+  const [logs, setLogs] = useState<LogEntry[]>([{ message: '应用已启动', time: formatTime(new Date()), kind: 'info' }]);
 
-  const log = (message: string) => setLogs((current) => [message, ...current].slice(0, 8));
+  const log = (message: string, kind: LogEntry['kind'] = 'info') => setLogs((current) => [{ message, time: formatTime(new Date()), kind }, ...current].slice(0, 6));
 
   useEffect(() => {
     let active = true;
@@ -110,9 +111,9 @@ export function App({ api }: AppProps) {
       await migrationApi.scanXiaomi();
       const localExports = await migrationApi.listExports();
       setExports(localExports); setSelectedExport(localExports[0] ?? null);
-      log('小米笔记导出成功'); setExportPickerOpen(false);
+      log('小米笔记导出成功', 'success'); setExportPickerOpen(false);
     } catch {
-      setError('小米笔记导出失败，请检查登录状态后重试。'); log('小米笔记导出失败');
+      setError('小米笔记导出失败，请检查登录状态后重试。'); log('小米笔记导出失败', 'error');
     } finally { setScanning(false); }
   };
 
@@ -146,7 +147,7 @@ export function App({ api }: AppProps) {
         <div><h1>笔记迁移</h1><p>小米云笔记与 vivo 原子笔记</p></div>
         <section className="operation-log" aria-label="最近操作">
           <strong>最近操作</strong>
-          <span>{logs[0] ?? '暂无操作'}</span>
+          <div className="operation-log-list" role="log" aria-live="polite">{logs.map((entry, index) => <span className={`log-entry log-${entry.kind}`} key={`${entry.time}-${index}`}><time>{entry.time}</time>{entry.message}</span>)}</div>
         </section>
       </header>
 
@@ -160,7 +161,7 @@ export function App({ api }: AppProps) {
       <section className="migration-section">
         <div className="section-heading">
           <div><h2>导出笔记</h2><p>{exports.length ? '本地保存的导出批次' : '登录后选择要导出的云平台'}</p></div>
-          <button className="button primary" disabled={!xiaomiConnected || scanning} onClick={() => setExportPickerOpen(true)}>
+          <button className="button primary" disabled={scanning} onClick={() => setExportPickerOpen(true)}>
             {scanning ? <LoaderCircle className="spin" size={17} /> : <Download size={17} />}{scanning ? '正在导出' : '导出笔记'}
           </button>
         </div>
@@ -211,13 +212,12 @@ function ProviderPanel({
         <h2>{name}</h2>
         <p>{state.accountLabel ?? (state.authenticated ? '后台会话' : '当前浏览器会话')}</p>
       </div>
-      {state.authenticated ? (
-        <span className="connected"><CheckCircle2 size={16} />已登录</span>
-      ) : (
-        <button className="button compact secondary login-button" onClick={onConnect} title={`登录${name}`} aria-label={`登录${name}`}>
-          {loading ? <LoaderCircle className="spin" size={16} /> : <LogIn size={16} />}登录
+      <div className="provider-status">
+        {state.authenticated && <span className="connected"><CheckCircle2 size={16} />已登录</span>}
+        <button className="button compact secondary login-button" onClick={onConnect} title={`${state.authenticated ? '重新登录' : '登录'}${name}`} aria-label={`${state.authenticated ? '重新登录' : '登录'}${name}`}>
+          {loading ? <LoaderCircle className="spin" size={16} /> : <LogIn size={16} />}{state.authenticated ? '重新登录' : '登录'}
         </button>
-      )}
+      </div>
     </article>
   );
 }
@@ -266,4 +266,8 @@ function formatDate(value: string): string {
   return new Intl.DateTimeFormat('zh-CN', {
     year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'
   }).format(new Date(value));
+}
+
+function formatTime(value: Date): string {
+  return value.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
