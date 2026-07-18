@@ -69,7 +69,11 @@ export class XiaomiProvider implements NotesProvider {
     const localPath = join(this.attachmentDirectory, localName);
     await mkdir(this.attachmentDirectory, { recursive: true });
     await writeFile(localPath, bytes, { mode: 0o600 });
-    return { ...attachment, localPath, sha256 };
+    return {
+      ...attachment,
+      localPath,
+      sha256
+    };
   }
 
   async createFolder(folder: SourceFolder): Promise<{ targetId: string }> {

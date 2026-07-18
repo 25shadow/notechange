@@ -63,7 +63,7 @@ type XiaomiCreateEntry = {
 | 方法 | 路径 | 参数或请求体 | 用途 |
 | --- | --- | --- | --- |
 | GET | `/note/full/folder` | `folderId`、`noteId`、`limit` | 分页读取指定文件夹 |
-| GET | `/file/full/v2` | `type=note_img`、`fileid` | 下载笔记图片 |
+| GET | `/file/full/v2` | `type=note_img`、`fileid` | 获取 KSS 下载元数据（`secure_key`、`blocks[].urls`）；逐块下载并按 `secure_key` 做 RC4 传输解包后得到原始附件字节 |
 | POST | `/note/note/:id` | 表单：`entry`（JSON 字符串） | 更新笔记 |
 | POST | `/note/full/:id/delete` | 表单：`tag`、`purge` | 移入回收站或彻底删除 |
 | POST | `/note/folder` | 表单：`entry` | 创建文件夹 |
@@ -131,6 +131,6 @@ vivo 网页还定义了本地同步桥调用：`note_insertNote`、`note_pc_upda
 
 ## 当前验证缺口
 
-- 小米更新、删除、文件夹和图片下载已由官方源码确认，但尚未在本次登录会话中逐项触发网络验证。
+- 小米附件下载已在真实登录态验证：`/file/full` 当前返回 `HWPENKITDATA` 包装，不能当图片直接保存；`/file/full/v2` 返回 KSS 元数据，下载 block 并解包后得到标准 JPEG/PNG 等原始附件。更新、删除和文件夹仍只有源码验证。
 - vivo `createSync` 创建、`getNote` 回验和 `deleteNote` 删除已使用无敏感合成笔记完成登录态网络验证。更新、笔记本创建和图片上传仍只有源码验证。
 - 真实写入验证必须只使用无敏感合成笔记，并在完成后通过接口删除。

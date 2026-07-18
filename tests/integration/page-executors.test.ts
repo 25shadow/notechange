@@ -9,10 +9,25 @@ import type { OperationContract } from '../../src/main/contracts/schema';
 
 describe.skipIf(process.env.CODEX_SANDBOX === 'seatbelt')('页面契约执行器', () => {
   let server: Server;
+  let imageServer: Server;
   let origin: string;
+  let imageOrigin: string;
   let sessions: SessionManager;
+  const imageSource = Buffer.from(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"><rect width="1" height="1" fill="red"/></svg>'
+  );
+  const secureKey = Buffer.from('00112233445566778899aabbccddeeff', 'hex');
 
   beforeEach(async () => {
+    imageServer = createServer((_request, response) => {
+      response.setHeader('Content-Type', 'application/octet-stream');
+      response.end(rc4(imageSource, secureKey));
+    });
+    await new Promise<void>((resolve) => imageServer.listen(0, '127.0.0.1', resolve));
+    const imageAddress = imageServer.address();
+    if (!imageAddress || typeof imageAddress === 'string') throw new Error('IMAGE_SERVER_MISSING');
+    imageOrigin = `http://127.0.0.1:${imageAddress.port}`;
+
     server = createServer((request, response) => {
       if (request.url === '/') {
         response.setHeader('Content-Type', 'text/html');
@@ -53,6 +68,23 @@ describe.skipIf(process.env.CODEX_SANDBOX === 'seatbelt')('页面契约执行器
         return;
       }
 
+      if (request.method === 'GET' && request.url?.startsWith('/file/full/v2?')) {
+        response.setHeader('Content-Type', 'application/json');
+        response.end(
+          JSON.stringify({
+            code: 0,
+            data: {
+              kss: {
+                stat: 'OK',
+                secure_key: secureKey.toString('hex'),
+                blocks: [{ urls: [`${imageOrigin}/note-image.kss`], size: imageSource.length }]
+              }
+            }
+          })
+        );
+        return;
+      }
+
       if (request.method === 'POST') {
         let body = '';
         request.on('data', (chunk) => {
@@ -87,6 +119,9 @@ describe.skipIf(process.env.CODEX_SANDBOX === 'seatbelt')('页面契约执行器
     await new Promise<void>((resolve, reject) =>
       server.close((error) => (error ? reject(error) : resolve()))
     );
+    await new Promise<void>((resolve, reject) =>
+      imageServer.close((error) => (error ? reject(error) : resolve()))
+    );
   });
 
   it('按小米契约在同源页面内发送查询', async () => {
@@ -102,6 +137,23 @@ describe.skipIf(process.env.CODEX_SANDBOX === 'seatbelt')('页面契约执行器
     await expect(
       executor.call(operation, { query: { syncTag: 'synthetic-cursor' } })
     ).resolves.toEqual({ cursor: 'synthetic-cursor' });
+  });
+
+  it('按 KSS 元数据下载并解包小米附件字节', async () => {
+    const page = await sessions.open('xiaomi-image-executor', origin);
+    const executor = new XiaomiPageExecutor(page);
+    const operation: OperationContract = {
+      name: 'downloadImage',
+      method: 'GET',
+      path: '/file/full/v2',
+      verification: 'source-verified'
+    };
+
+    const bytes = await executor.call<Uint8Array>(operation, {
+      query: { type: 'note_img', fileid: 'synthetic-image' }
+    });
+
+    expect(Buffer.from(bytes)).toEqual(imageSource);
   });
 
   it('只在页面上下文中生成 vivo 加密外层', async () => {
@@ -120,3 +172,22 @@ describe.skipIf(process.env.CODEX_SANDBOX === 'seatbelt')('页面契约执行器
     });
   });
 });
+
+function rc4(input: Uint8Array, key: Uint8Array): Buffer {
+  const state = Array.from({ length: 256 }, (_, index) => index);
+  let j = 0;
+  for (let i = 0; i < 256; i += 1) {
+    j = (j + state[i] + key[i % key.length]) & 0xff;
+    [state[i], state[j]] = [state[j], state[i]];
+  }
+  const output = Buffer.alloc(input.length);
+  let i = 0;
+  j = 0;
+  for (let offset = 0; offset < input.length; offset += 1) {
+    i = (i + 1) & 0xff;
+    j = (j + state[i]) & 0xff;
+    [state[i], state[j]] = [state[j], state[i]];
+    output[offset] = input[offset] ^ state[(state[i] + state[j]) & 0xff];
+  }
+  return output;
+}

@@ -141,6 +141,33 @@ describe('XiaomiProvider', () => {
       type: 'note_img',
       fileid: 'synthetic-file-1'
     });
+    expect(executor.calls[0]?.operation.path).toBe('/file/full/v2');
+  });
+
+  it('KSS 解包后保留附件原始类型和文件名', async () => {
+    const contract = parseProviderContract(xiaomiContractJson);
+    const provider = new XiaomiProvider(
+      new XiaomiApi(
+        {
+          async call<T>() {
+            return new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]) as T;
+          }
+        },
+        contract
+      )
+    );
+
+    try {
+      await expect(
+        provider.downloadAttachment({
+          sourceId: 'synthetic-jpeg',
+          mimeType: 'image/jpeg',
+          filename: 'note-image.jpg'
+        })
+      ).resolves.toMatchObject({ mimeType: 'image/jpeg', filename: 'note-image.jpg' });
+    } finally {
+      await provider.dispose();
+    }
   });
 
   it('拒绝执行尚未网络验证的文件夹写操作', async () => {

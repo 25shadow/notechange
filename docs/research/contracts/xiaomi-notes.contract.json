@@ -43,7 +43,7 @@
     },
     { "name": "createNote", "method": "POST", "path": "/note/note", "bodyEncoding": "form", "bodyKeys": ["entry", "serviceToken"], "verification": "network-verified" },
     { "name": "listFolderNotes", "method": "GET", "path": "/note/full/folder", "queryKeys": ["folderId", "noteId", "limit"], "verification": "source-verified" },
-    { "name": "downloadImage", "method": "GET", "path": "/file/full/v2", "queryKeys": ["type", "fileid"], "verification": "source-verified" },
+    { "name": "downloadImage", "method": "GET", "path": "/file/full/v2", "queryKeys": ["type", "fileid"], "verification": "network-verified" },
     { "name": "updateNote", "method": "POST", "path": "/note/note/:id", "bodyEncoding": "form", "bodyKeys": ["entry"], "verification": "source-verified" },
     { "name": "deleteNote", "method": "POST", "path": "/note/full/:id/delete", "bodyEncoding": "form", "bodyKeys": ["tag", "purge"], "verification": "source-verified" },
     { "name": "createFolder", "method": "POST", "path": "/note/folder", "bodyEncoding": "form", "bodyKeys": ["entry"], "verification": "source-verified" },
