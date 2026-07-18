@@ -211,7 +211,8 @@ export class MigrationRuntime {
       plainText: note.plainText,
       createdAt: note.createdAt,
       modifiedAt: note.modifiedAt,
-      attachments: note.attachments.map(({ sha256, filename, mimeType }) => ({
+      attachments: note.attachments.map(({ sourceId, sha256, filename, mimeType }) => ({
+        sourceId,
         sha256,
         filename,
         mimeType

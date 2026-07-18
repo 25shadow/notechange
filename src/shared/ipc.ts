@@ -47,7 +47,12 @@ export type ExportPreviewDetail = {
   plainText: string;
   createdAt: string | null;
   modifiedAt: string | null;
-  attachments: Array<{ sha256: string; filename: string; mimeType: string }>;
+  attachments: Array<{
+    sourceId: string;
+    sha256: string;
+    filename: string;
+    mimeType: string;
+  }>;
   warnings: Array<{ code: string; message: string }>;
 };
 

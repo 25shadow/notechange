@@ -333,6 +333,50 @@ describe('MigrationRuntime', () => {
     });
   });
 
+  it('预览详情暴露附件 sourceId 但不暴露本地路径', async () => {
+    const exports = new MemoryExports();
+    await exports.save({
+      notes: [{
+        ...canonicalNote,
+        attachments: [{
+          sourceId: 'file-a',
+          mimeType: 'image/jpeg',
+          filename: 'a.jpg',
+          sha256: 'b'.repeat(64),
+          localPath: '/private/a.jpg'
+        }]
+      }],
+      attachmentCount: 1,
+      warningCount: 0
+    });
+    const runtime = new MigrationRuntime({
+      sessionManager: {
+        getPage: vi.fn(() => null),
+        open: vi.fn(),
+        persist: vi.fn(),
+        switchToHeaded: vi.fn(),
+        switchToHeadless: vi.fn(),
+        disposeAll: vi.fn(async () => undefined)
+      },
+      createProvider: () => new FakeProvider('xiaomi'),
+      checkpoints: new MemoryCheckpoints(),
+      exports
+    });
+
+    const detail = await runtime.getExportPreviewDetail({
+      batchId: 'batch-1',
+      sourceId: 'synthetic-1'
+    });
+
+    expect(detail.attachments).toEqual([{
+      sourceId: 'file-a',
+      mimeType: 'image/jpeg',
+      filename: 'a.jpg',
+      sha256: 'b'.repeat(64)
+    }]);
+    expect(detail.attachments[0]).not.toHaveProperty('localPath');
+  });
+
   it('从本地恢复的批次导入 vivo 时不要求小米在线', async () => {
     const vivoPage = {} as Page;
     const vivo = new FakeProvider('vivo');
