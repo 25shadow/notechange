@@ -3,7 +3,6 @@ import {
   AlertTriangle,
   ChevronLeft,
   ChevronRight,
-  Image as ImageIcon,
   LoaderCircle,
   Paperclip,
   Search,
@@ -17,6 +16,7 @@ import type {
   LocalExportSummary,
   NoteChangeApi
 } from '../shared/ipc';
+import { splitInlineAttachments } from './inline-attachments';
 
 const pageSize = 50;
 
@@ -192,21 +192,11 @@ export function ExportPreviewDialog({
                     ))}
                   </div>
                 )}
-                <div className="preview-note-body">{detail.plainText || '无正文'}</div>
-                {detail.attachments.length > 0 && (
-                  <div className="preview-attachments">
-                    <h4><ImageIcon size={15} />图片附件</h4>
-                    {detail.attachments.map((attachment) => (
-                      <AttachmentPreview
-                        key={attachment.sha256}
-                        api={api}
-                        batchId={summary?.batchId ?? ''}
-                        sourceId={detail.sourceId}
-                        attachment={attachment}
-                      />
-                    ))}
-                  </div>
-                )}
+                <PreviewNoteContent
+                  api={api}
+                  batchId={summary?.batchId ?? ''}
+                  detail={detail}
+                />
               </>
             ) : (
               <div className="preview-empty">选择一条笔记查看正文</div>
@@ -215,6 +205,54 @@ export function ExportPreviewDialog({
         </div>
       </section>
     </div>
+  );
+}
+
+function PreviewNoteContent({
+  api,
+  batchId,
+  detail
+}: {
+  api: NoteChangeApi;
+  batchId: string;
+  detail: ExportPreviewDetail;
+}) {
+  const { segments, unreferenced } = splitInlineAttachments(detail.plainText, detail.attachments);
+  return (
+    <>
+      <div className="preview-note-content" data-testid="preview-note-content">
+        {segments.map((segment, index) =>
+          segment.type === 'text' ? (
+            <div key={`text-${index}`} data-kind="text" className="preview-note-text">
+              {segment.value || (segments.length === 1 ? '无正文' : '')}
+            </div>
+          ) : (
+            <div key={segment.attachment.sha256} data-kind="attachment" className="preview-inline-attachment">
+              <AttachmentPreview
+                api={api}
+                batchId={batchId}
+                sourceId={detail.sourceId}
+                attachment={segment.attachment}
+              />
+            </div>
+          )
+        )}
+      </div>
+      {unreferenced.length > 0 && (
+        <div className="preview-attachments">
+          <h4><Paperclip size={15} />其他附件</h4>
+          {unreferenced.map((attachment) => (
+            <AttachmentPreview
+              key={attachment.sha256}
+              api={api}
+              batchId={batchId}
+              sourceId={detail.sourceId}
+              attachment={attachment}
+            />
+          ))}
+        </div>
+      )}
+    </>
   );
 }
 
@@ -230,16 +268,29 @@ function AttachmentPreview({
   attachment: ExportPreviewDetail['attachments'][number];
 }) {
   const [src, setSrc] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
   useEffect(() => {
     let active = true;
-    void api.getExportAttachment({ batchId, sourceId, sha256: attachment.sha256 }).then((data) => {
-      if (active) setSrc(`data:${data.mimeType};base64,${data.base64}`);
-    });
+    setSrc(null);
+    setFailed(false);
+    if (!attachment.mimeType.startsWith('image/')) return () => undefined;
+    void api
+      .getExportAttachment({ batchId, sourceId, sha256: attachment.sha256 })
+      .then((data) => {
+        if (active) setSrc(`data:${data.mimeType};base64,${data.base64}`);
+      })
+      .catch(() => {
+        if (active) setFailed(true);
+      });
     return () => {
       active = false;
     };
-  }, [api, attachment.sha256, batchId, sourceId]);
-  return src ? <img src={src} alt={attachment.filename} /> : <div className="preview-image-loading">正在读取图片</div>;
+  }, [api, attachment.mimeType, attachment.sha256, batchId, sourceId]);
+  if (!attachment.mimeType.startsWith('image/')) {
+    return <div className="preview-file-attachment"><Paperclip size={14} />{attachment.filename}</div>;
+  }
+  if (failed) return <div className="preview-image-loading">附件读取失败：{attachment.filename}</div>;
+  return src ? <img className="preview-inline-image" src={src} alt={attachment.filename} /> : <div className="preview-image-loading">正在读取图片</div>;
 }
 
 function formatDate(value: string | null): string {

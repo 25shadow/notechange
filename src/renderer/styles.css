@@ -118,10 +118,13 @@ button:focus-visible, input:focus-visible { outline: 3px solid rgba(47, 93, 140,
 .preview-detail-heading p { margin: 7px 0 0; color: #7b8680; font-size: 11px; }
 .preview-warning-list { display: flex; flex-wrap: wrap; gap: 7px; padding-top: 14px; }
 .preview-warning-list span { display: inline-flex; align-items: center; gap: 5px; padding: 5px 8px; border-left: 2px solid #c6543f; color: #843829; background: #f8eae6; font-size: 11px; }
-.preview-note-body { min-height: 220px; padding: 22px 0; color: #29342f; font-size: 13px; line-height: 1.75; white-space: pre-wrap; overflow-wrap: anywhere; }
+.preview-note-content { min-height: 220px; padding: 22px 0; color: #29342f; font-size: 13px; line-height: 1.75; overflow-wrap: anywhere; }
+.preview-note-text { white-space: pre-wrap; }
+.preview-inline-attachment { margin: 12px 0 16px; }
 .preview-attachments { padding-top: 18px; border-top: 1px solid #e0e5e2; }
 .preview-attachments h4 { display: flex; align-items: center; gap: 6px; margin: 0 0 12px; color: #53615a; font-size: 12px; }
-.preview-attachments img { display: block; max-width: 100%; max-height: 520px; margin-bottom: 14px; object-fit: contain; border: 1px solid #d8dedb; border-radius: 4px; background: #f3f6f4; }
+.preview-inline-image, .preview-attachments img { display: block; max-width: 100%; max-height: 520px; margin-bottom: 14px; object-fit: contain; border: 1px solid #d8dedb; border-radius: 4px; background: #f3f6f4; }
+.preview-file-attachment { display: flex; align-items: center; gap: 7px; padding: 10px 12px; color: #526159; border: 1px solid #d8dedb; border-radius: 4px; background: #f5f7f6; font-size: 12px; }
 .preview-image-loading, .preview-loading, .preview-empty { min-height: 120px; display: flex; align-items: center; justify-content: center; gap: 8px; color: #87928c; font-size: 11px; }
 
 .confirm-overlay { position: fixed; inset: 0; z-index: 120; display: grid; place-items: center; padding: 24px; background: rgba(20, 28, 24, 0.48); }
