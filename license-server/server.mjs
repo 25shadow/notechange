@@ -200,7 +200,7 @@ async function applySourceUpdate(response) {
     const remote = (await runUpdateCommand('git', ['rev-parse', 'origin/main'])).trim();
     if (current !== remote) {
       await runUpdateCommand('git', ['pull', '--ff-only', 'origin', 'main']);
-      await runUpdateCommand('npm', ['ci']);
+      await runNpmInstall();
     }
     sourceUpdate.current = (await runUpdateCommand('git', ['rev-parse', 'HEAD'])).trim();
     sourceUpdate.remote = (await runUpdateCommand('git', ['rev-parse', 'origin/main'])).trim();
@@ -217,16 +217,27 @@ async function applySourceUpdate(response) {
   } finally { sourceUpdate.running = false; }
 }
 
-function runUpdateCommand(command, args) {
+function runNpmInstall() {
+  if (process.env.npm_execpath) return runUpdateCommand(process.execPath, [process.env.npm_execpath, 'ci'], 'npm ci');
+  return runUpdateCommand('npm', ['ci']);
+}
+
+function runUpdateCommand(command, args, displayCommand = `${command} ${args.join(' ')}`) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, { cwd: process.cwd(), env: process.env, shell: false });
     let output = '';
+    let launched = true;
     const capture = (chunk) => { output += chunk.toString(); if (output.length > 12000) output = output.slice(-12000); };
     child.stdout.on('data', capture); child.stderr.on('data', capture);
-    child.on('error', reject);
+    child.on('error', (error) => {
+      launched = false;
+      sourceUpdate.logs.push(`$ ${displayCommand}\n启动失败：${error.message}`);
+      reject(error);
+    });
     child.on('close', (code) => {
-      sourceUpdate.logs.push(`$ ${command} ${args.join(' ')}\n${output || '(无输出)'}`);
-      if (code === 0) resolve(output); else reject(new Error(`${command} 退出码 ${code}`));
+      if (!launched) return;
+      sourceUpdate.logs.push(`$ ${displayCommand}\n${output || '(无输出)'}`);
+      if (code === 0) resolve(output); else reject(new Error(`${displayCommand} 退出码 ${code}`));
     });
   });
 }
