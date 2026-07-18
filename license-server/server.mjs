@@ -2,14 +2,12 @@ import { createHash, randomBytes, randomUUID, sign } from 'node:crypto';
 import { createServer } from 'node:http';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { homedir } from 'node:os';
+import { ensureLicenseConfiguration } from './key-store.mjs';
 
 const port = Number(process.env.LICENSE_PORT || 8787);
-const dataDir = process.env.LICENSE_DATA_DIR || join(process.cwd(), 'license-data');
-const adminToken = process.env.LICENSE_ADMIN_TOKEN || '';
-const privateKey = (process.env.LICENSE_PRIVATE_KEY_PEM || '').replace(/\\n/g, '\n');
-if (!adminToken || !privateKey) {
-  throw new Error('Set LICENSE_ADMIN_TOKEN and LICENSE_PRIVATE_KEY_PEM before starting the license server.');
-}
+const dataDir = process.env.LICENSE_DATA_DIR || join(homedir(), '.notechange-license');
+const { adminToken, privateKey } = await ensureLicenseConfiguration(dataDir);
 const databaseFile = join(dataDir, 'licenses.json');
 const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 let database = await loadDatabase();
@@ -28,7 +26,7 @@ createServer(async (request, response) => {
   } catch (error) {
     return json(response, 500, { error: error instanceof Error ? error.message : 'INTERNAL_ERROR' });
   }
-}).listen(port, () => console.log(`License server listening on :${port}`));
+}).listen(port, () => console.log(`License server listening on :${port}; admin token file: ${join(dataDir, 'admin-token')}`));
 
 async function activate(request, response) {
   const { code, installationId } = await body(request);
