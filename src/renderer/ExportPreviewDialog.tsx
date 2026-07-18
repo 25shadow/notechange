@@ -147,7 +147,6 @@ export function ExportPreviewDialog({
 
         <div className="preview-workspace">
           <aside className="preview-index" aria-label="导出笔记列表">
-            <button className="button primary preview-import-button" onClick={() => setImportPickerOpen(true)}>导入</button>
             <div className="preview-index-count">{page.total} 条结果</div>
             <div className="preview-list">
               {loading ? (

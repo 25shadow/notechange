@@ -2,7 +2,7 @@
 
 import '@testing-library/jest-dom/vitest';
 
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { App, type RendererMigrationApi } from '../../src/renderer/App';
@@ -20,8 +20,7 @@ describe('导出笔记预览', () => {
   });
 
   it('预览组件在 vivo 未登录时禁用导入', async () => {
-    render(<ExportPreviewDialog api={previewApi()} summary={{ batchId: 'b', exportedAt: '2026-07-17T00:00:00Z', noteCount: 1, attachmentCount: 0, warningCount: 0 }} vivoAuthenticated={false} onRequestImport={vi.fn()} onClose={vi.fn()} />);
-    fireEvent.click(await screen.findByRole('button', { name: '导入' }));
+    render(<ExportPreviewDialog api={previewApi()} summary={{ batchId: 'b', exportedAt: '2026-07-17T00:00:00Z', noteCount: 1, attachmentCount: 0, warningCount: 0 }} vivoAuthenticated={false} initialImportOpen onRequestImport={vi.fn()} onClose={vi.fn()} />);
     expect(screen.getByRole('button', { name: 'vivo 原子笔记' })).toBeDisabled();
   });
 
@@ -30,8 +29,7 @@ describe('导出笔记预览', () => {
     [{ created: 1, skipped: 0, failed: 0, manualReview: 0, cancelled: true }, '导入已取消']
   ] as const)('显示导入状态：%s', async (report, message) => {
     const onRequestImport = vi.fn(async () => report);
-    render(<ExportPreviewDialog api={previewApi()} summary={{ batchId: 'b', exportedAt: '2026-07-17T00:00:00Z', noteCount: 1, attachmentCount: 0, warningCount: 0 }} vivoAuthenticated onRequestImport={onRequestImport} onClose={vi.fn()} />);
-    fireEvent.click(await screen.findByRole('button', { name: '导入' }));
+    render(<ExportPreviewDialog api={previewApi()} summary={{ batchId: 'b', exportedAt: '2026-07-17T00:00:00Z', noteCount: 1, attachmentCount: 0, warningCount: 0 }} vivoAuthenticated initialImportOpen onRequestImport={onRequestImport} onClose={vi.fn()} />);
     fireEvent.click(screen.getByRole('button', { name: 'vivo 原子笔记' }));
     expect(await screen.findByText(new RegExp(message))).toBeVisible();
   });
@@ -50,9 +48,8 @@ describe('导出笔记预览', () => {
     };
     render(<App api={api} />);
     fireEvent.click(await screen.findByRole('button', { name: '查看' }));
-    const preview = await screen.findByRole('dialog', { name: '小米笔记预览' });
-    fireEvent.click(within(preview).getByRole('button', { name: '导入' }));
-    expect(screen.getByRole('button', { name: 'vivo 原子笔记' })).toBeDisabled();
+    fireEvent.click(await screen.findByRole('button', { name: '导入' }));
+    expect(await screen.findByRole('button', { name: 'vivo 原子笔记' })).toBeDisabled();
   });
 
   it('恢复本地批次并搜索查看纯文本详情', async () => {
@@ -133,8 +130,7 @@ describe('导出笔记预览', () => {
     expect(screen.queryByText('需处理')).toBeNull();
     expect(screen.queryByText('包含需核对内容')).toBeNull();
 
-    const preview = screen.getByRole('dialog', { name: '小米笔记预览' });
-    fireEvent.click(within(preview).getByRole('button', { name: '导入' }));
+    fireEvent.click(screen.getByRole('button', { name: '导入' }));
     expect(await screen.findByRole('dialog', { name: '选择导入平台' })).toBeVisible();
     expect(screen.getByRole('button', { name: 'vivo 原子笔记' })).toBeEnabled();
     fireEvent.click(screen.getByRole('button', { name: 'vivo 原子笔记' }));

@@ -57,9 +57,12 @@ button:focus-visible, input:focus-visible { outline: 3px solid rgba(47, 93, 140,
 .export-table td { height: 58px; padding: 8px 16px; border-bottom: 1px solid #e0e5e2; color: #34413b; font-size: 12px; }
 .export-table tbody tr:last-child td { border-bottom: 0; }
 .export-table tbody tr.selected { box-shadow: inset 3px 0 #1f5745; background: #f3f8f5; }
-.export-table th:first-child { width: 31%; }
-.export-table th:last-child { width: 190px; }
-.export-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.export-table th:nth-child(1) { width: 18%; }
+.export-table th:nth-child(2) { width: 24%; }
+.export-table th:nth-child(3), .export-table th:nth-child(4) { width: 11%; }
+.export-table th:last-child { width: 250px; }
+.export-actions { display: flex; justify-content: flex-start; gap: 6px; }
+.export-actions .button { min-width: 0; white-space: nowrap; }
 .batch-selection-hint { min-height: 56px; display: flex; align-items: center; justify-content: center; border-top: 1px solid #dde2df; color: #7a8580; font-size: 11px; }
 .preview-command-row { min-height: 56px; display: flex; align-items: center; justify-content: flex-end; padding: 0 22px; border-top: 1px solid #dde2df; }
 .action-row { min-height: 68px; display: flex; align-items: center; justify-content: flex-end; gap: 20px; padding: 0 22px; border-top: 1px solid #dde2df; }
