@@ -12,6 +12,7 @@ import type {
   ExportBundleStore,
   StoredExportBundle
 } from '../../src/main/storage/export-bundle-store';
+import type { ImportHistoryStore, StoredImportTask } from '../../src/main/storage/import-history-store';
 import type {
   DownloadedAttachment,
   LoginState,
@@ -118,6 +119,15 @@ class MemoryExports implements ExportBundleStore {
   async readAttachment() {
     return new Uint8Array([1, 2, 3]);
   }
+}
+
+class MemoryImportHistory implements ImportHistoryStore {
+  readonly create = vi.fn(async (_task: StoredImportTask) => undefined);
+  readonly appendProgress = vi.fn(async () => undefined);
+  readonly appendFailure = vi.fn(async () => undefined);
+  readonly complete = vi.fn(async () => undefined);
+  readonly list = vi.fn(async () => []);
+  readonly get = vi.fn(async () => null);
 }
 
 describe('MigrationRuntime', () => {
@@ -468,5 +478,103 @@ describe('MigrationRuntime', () => {
     await runtime.selectExport('batch-2');
     await runtime.deleteExport('batch-1');
     expect(() => runtime.confirmMigration()).not.toThrow();
+  });
+
+  it('导入时持久化进度和失败，并在持久化后通知进度', async () => {
+    const page = {} as Page;
+    const vivo = new FakeProvider('vivo');
+    vivo.upsertNote = vi.fn(async () => {
+      throw new Error('AUTH_EXPIRED');
+    });
+    const history = new MemoryImportHistory();
+    const runtime = new MigrationRuntime({
+      sessionManager: {
+        getPage: vi.fn((provider: string) => (provider === 'vivo' || provider === 'xiaomi' ? page : null)),
+        open: vi.fn(), persist: vi.fn(), switchToHeaded: vi.fn(), switchToHeadless: vi.fn(), disposeAll: vi.fn()
+      },
+      createProvider: (provider) => (provider === 'vivo' ? vivo : new FakeProvider('xiaomi')),
+      checkpoints: new MemoryCheckpoints(),
+      exports: new MemoryExports(),
+      importHistory: history
+    });
+    await runtime.scanXiaomi();
+    runtime.confirmMigration();
+    const onProgress = vi.fn();
+
+    await expect(runtime.startImport(onProgress)).resolves.toMatchObject({ failed: 1 });
+
+    expect(history.create).toHaveBeenCalledOnce();
+    expect(history.appendProgress).toHaveBeenCalledOnce();
+    expect(history.appendFailure).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ outcome: 'failed', errorCode: 'AUTH_EXPIRED' })
+    );
+    expect(history.complete).toHaveBeenCalledWith(
+      expect.any(String), 'completed-with-issues', expect.any(String)
+    );
+    expect(onProgress.mock.invocationCallOrder[0]).toBeGreaterThan(
+      history.appendFailure.mock.invocationCallOrder[0]
+    );
+  });
+
+  it('将附件未迁移记录为带有安全附件元数据的人工核对项', async () => {
+    const page = {} as Page;
+    const xiaomi = new FakeProvider('xiaomi');
+    xiaomi.getNote = vi.fn(async () => ({
+      ...canonicalNote,
+      attachments: [{
+        sourceId: 'attachment-1',
+        filename: 'fixture.png',
+        mimeType: 'image/png',
+        localPath: '/synthetic/fixture.png',
+        sha256: 'b'.repeat(64)
+      }]
+    }));
+    const history = new MemoryImportHistory();
+    const runtime = new MigrationRuntime({
+      sessionManager: {
+        getPage: vi.fn(() => page), open: vi.fn(), persist: vi.fn(), switchToHeaded: vi.fn(), switchToHeadless: vi.fn(), disposeAll: vi.fn()
+      },
+      createProvider: (provider) => (provider === 'xiaomi' ? xiaomi : new FakeProvider('vivo')),
+      checkpoints: new MemoryCheckpoints(),
+      exports: new MemoryExports(),
+      importHistory: history
+    });
+    await runtime.scanXiaomi();
+    runtime.confirmMigration();
+
+    await expect(runtime.startImport()).resolves.toMatchObject({ created: 1, manualReview: 1 });
+
+    expect(history.appendFailure).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        outcome: 'manual-review',
+        errorCode: 'VIVO_ATTACHMENT_UPLOAD_UNVERIFIED',
+        attachment: { filename: 'fixture.png', mimeType: 'image/png' }
+      })
+    );
+  });
+
+  it('通过同一 profile 的有头会话打开笔记中心', async () => {
+    const page = {} as Page;
+    const sessionManager = {
+      getPage: vi.fn((provider: string) => (provider === 'vivo' ? page : null)),
+      open: vi.fn(async () => page), persist: vi.fn(), switchToHeaded: vi.fn(async () => page),
+      switchToHeadless: vi.fn(), disposeAll: vi.fn()
+    };
+    const runtime = new MigrationRuntime({
+      sessionManager, createProvider: () => new FakeProvider('vivo'),
+      checkpoints: new MemoryCheckpoints(), exports: new MemoryExports()
+    });
+
+    await runtime.openNoteCenter('vivo');
+    await runtime.openNoteCenter('xiaomi');
+
+    expect(sessionManager.switchToHeaded).toHaveBeenCalledWith(
+      'vivo', 'https://pc.vivo.com.cn/suite?origin=cloudWeb#/note'
+    );
+    expect(sessionManager.open).toHaveBeenCalledWith(
+      'xiaomi', 'https://i.mi.com/note/h5#/', 'headed'
+    );
   });
 });

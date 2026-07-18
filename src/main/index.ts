@@ -10,6 +10,8 @@ import { createProvider } from './runtime/provider-factory';
 import { MemoryMigrationCheckpointStore } from './storage/memory-checkpoint-store';
 import { FileExportBundleStore } from './storage/file-export-bundle-store';
 import { exportRoot } from './storage/export-root';
+import { FileImportHistoryStore } from './storage/import-history-store';
+import { importHistoryRoot } from './storage/import-history-root';
 
 let migrationRuntime: MigrationRuntime | null = null;
 
@@ -41,7 +43,8 @@ app.whenReady().then(() => {
     ),
     createProvider,
     checkpoints: new MemoryMigrationCheckpointStore(),
-    exports: new FileExportBundleStore(exportRoot(app.getPath('userData')))
+    exports: new FileExportBundleStore(exportRoot(app.getPath('userData'))),
+    importHistory: new FileImportHistoryStore(importHistoryRoot(app.getPath('userData')))
   });
   registerMigrationIpc(ipcMain, migrationRuntime);
   createWindow();

@@ -6,6 +6,7 @@ import type {
   MigrationCheckpoint,
   MigrationCheckpointStore
 } from '../../src/main/migration/orchestrator';
+import type { MigrationProgress } from '../../src/shared/ipc';
 import type {
   DownloadedAttachment,
   LoginState,
@@ -28,6 +29,16 @@ function note(id: string): CanonicalNote {
     modifiedAt: null,
     contentHash: id.padEnd(64, 'a').slice(0, 64),
     warnings: []
+  };
+}
+
+function attachment(): DownloadedAttachment {
+  return {
+    sourceId: 'attachment-1',
+    filename: 'fixture.png',
+    mimeType: 'image/png',
+    sha256: 'b'.repeat(64),
+    localPath: '/synthetic/fixture.png'
   };
 }
 
@@ -134,5 +145,59 @@ describe('MigrationOrchestrator', () => {
     expect(first).toMatchObject({ created: 1, failed: 1 });
     expect(resumed).toMatchObject({ created: 1, skipped: 1 });
     expect(target.writes).toEqual(['note-1', 'note-2']);
+  });
+
+  it('emits progress for each import outcome', async () => {
+    const source = new MemorySource([note('note-1'), note('note-2')]);
+    const target = new MemoryTarget();
+    target.failOnceFor = 'note-2';
+    const orchestrator = new MigrationOrchestrator(source, target, new MemoryCheckpointStore());
+    const bundle = await orchestrator.exportFromSource();
+    const snapshots: MigrationProgress[] = [];
+    orchestrator.confirm();
+
+    const report = await orchestrator.importToTarget(bundle, (snapshot) => snapshots.push(snapshot));
+
+    expect(report).toMatchObject({ created: 1, failed: 1 });
+    expect(snapshots.at(-1)).toMatchObject({
+      total: 2,
+      completed: 2,
+      created: 1,
+      skipped: 0,
+      failed: 1,
+      manualReview: 0
+    });
+    expect(snapshots.map((snapshot) => snapshot.current?.outcome)).toEqual(['created', 'failed']);
+  });
+
+  it('records every attachment omission after creating a note', async () => {
+    const attachedNote = { ...note('note-1'), attachments: [attachment()] };
+    const source = new MemorySource([attachedNote]);
+    const target = new MemoryTarget();
+    const checkpoints = new MemoryCheckpointStore();
+    const orchestrator = new MigrationOrchestrator(source, target, checkpoints);
+    const bundle = await orchestrator.exportFromSource();
+    const progress: MigrationProgress[] = [];
+    let observerCompleted = false;
+    orchestrator.confirm();
+
+    const report = await orchestrator.importToTarget(bundle, async (snapshot) => {
+      await Promise.resolve();
+      progress.push(snapshot);
+      observerCompleted = true;
+    });
+
+    expect(observerCompleted).toBe(true);
+    expect(report).toMatchObject({ created: 1, manualReview: 1 });
+    expect(checkpoints.values.get('note-1')).toMatchObject({ status: 'created' });
+    expect(progress.at(-1)).toMatchObject({
+      created: 1,
+      manualReview: 1,
+      current: {
+        outcome: 'manual-review',
+        errorCode: 'VIVO_ATTACHMENT_UPLOAD_UNVERIFIED',
+        attachment: { filename: 'fixture.png', mimeType: 'image/png' }
+      }
+    });
   });
 });

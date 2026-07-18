@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { ipcChannels } from '../../src/shared/ipc';
+import { ipcChannels, type ImportProgress } from '../../src/shared/ipc';
 import { registerMigrationIpc } from '../../src/main/runtime/ipc-handlers';
 
 describe('registerMigrationIpc', () => {
@@ -37,12 +37,17 @@ describe('registerMigrationIpc', () => {
         manualReview: 0,
         cancelled: false
       })),
-      cancelMigration: vi.fn()
+      cancelMigration: vi.fn(),
+      openNoteCenter: vi.fn(async () => undefined),
+      listImportHistory: vi.fn(async () => []),
+      getImportHistory: vi.fn(async () => null)
     };
 
     registerMigrationIpc(ipcMain, runtime);
 
-    expect([...handlers.keys()].sort()).toEqual(Object.values(ipcChannels).sort());
+    expect([...handlers.keys()].sort()).toEqual(
+      Object.values(ipcChannels).filter((channel) => channel !== ipcChannels.importProgress).sort()
+    );
     await expect(
       handlers.get(ipcChannels.startLogin)?.({}, 'unknown')
     ).rejects.toThrow('INVALID_PROVIDER');
@@ -65,5 +70,23 @@ describe('registerMigrationIpc', () => {
     const attachmentRequest = { ...detailRequest, sha256: 'a'.repeat(64) };
     await handlers.get(ipcChannels.getExportAttachment)?.({}, attachmentRequest);
     expect(runtime.getExportAttachment).toHaveBeenCalledWith(attachmentRequest);
+
+    const sender = { send: vi.fn() };
+    await handlers.get(ipcChannels.startImport)?.({ sender });
+    expect(runtime.startImport).toHaveBeenCalledOnce();
+    const observer = (runtime.startImport.mock.calls as unknown as Array<[unknown]>)[0]?.[0] as
+      | ((progress: ImportProgress) => unknown)
+      | undefined;
+    await observer?.({
+      taskId: 'task-1', total: 1, completed: 1, created: 1, skipped: 0, failed: 0,
+      manualReview: 0, current: null, occurredAt: '2026-07-18T00:00:00.000Z'
+    });
+    expect(sender.send).toHaveBeenCalledWith(ipcChannels.importProgress, expect.any(Object));
+
+    await handlers.get(ipcChannels.openNoteCenter)?.({ sender }, 'vivo');
+    expect(runtime.openNoteCenter).toHaveBeenCalledWith('vivo');
+    await expect(handlers.get(ipcChannels.getImportHistory)?.({ sender }, '../bad')).rejects.toThrow(
+      'INVALID_TASK_ID'
+    );
   });
 });

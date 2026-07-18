@@ -1,8 +1,10 @@
-import { ipcChannels, type CloudProvider } from '../../shared/ipc';
+import { ipcChannels, type CloudProvider, type ImportProgress } from '../../shared/ipc';
 import type { MigrationRuntime } from './migration-runtime';
 
+type IpcEventLike = { sender: { send(channel: string, ...args: unknown[]): void } };
+
 type IpcMainLike = {
-  handle(channel: string, handler: (event: unknown, ...args: unknown[]) => unknown): void;
+  handle(channel: string, handler: (event: IpcEventLike, ...args: unknown[]) => unknown): void;
 };
 
 type MigrationRuntimeCommands = Pick<
@@ -20,6 +22,9 @@ type MigrationRuntimeCommands = Pick<
   | 'confirmMigration'
   | 'startImport'
   | 'cancelMigration'
+  | 'openNoteCenter'
+  | 'listImportHistory'
+  | 'getImportHistory'
 > & Partial<Pick<MigrationRuntime, 'logout'>>;
 
 export function registerMigrationIpc(
@@ -60,8 +65,26 @@ export function registerMigrationIpc(
     )
   );
   ipcMain.handle(ipcChannels.confirmMigration, async () => runtime.confirmMigration());
-  ipcMain.handle(ipcChannels.startImport, async () => runtime.startImport());
+  ipcMain.handle(ipcChannels.startImport, async (event) =>
+    runtime.startImport((progress: ImportProgress) =>
+      event.sender.send(ipcChannels.importProgress, progress)
+    )
+  );
   ipcMain.handle(ipcChannels.cancelMigration, async () => runtime.cancelMigration());
+  ipcMain.handle(ipcChannels.openNoteCenter, async (_event, provider) =>
+    runtime.openNoteCenter(parseProvider(provider))
+  );
+  ipcMain.handle(ipcChannels.listImportHistory, async () => runtime.listImportHistory());
+  ipcMain.handle(ipcChannels.getImportHistory, async (_event, taskId) =>
+    runtime.getImportHistory(parseTaskId(taskId))
+  );
+}
+
+function parseTaskId(value: unknown): string {
+  if (typeof value !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(value)) {
+    throw new Error('INVALID_TASK_ID');
+  }
+  return value;
 }
 
 function parseProvider(value: unknown): CloudProvider {

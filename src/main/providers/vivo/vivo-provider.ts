@@ -55,9 +55,6 @@ export class VivoProvider implements NotesProvider {
     note: CanonicalNote,
     targetFolderId: string | null
   ): Promise<TargetNote> {
-    if (note.attachments.length > 0) {
-      throw new Error('VIVO_ATTACHMENTS_UNSUPPORTED');
-    }
     const syncState = await this.api.getSyncState(0);
     const guid = randomUUID();
     const createdAt = note.createdAt ? Date.parse(note.createdAt) : Date.now();

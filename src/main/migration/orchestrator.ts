@@ -1,4 +1,9 @@
 import type { CanonicalNote } from '../../shared/domain';
+import type {
+  ImportAttachmentMetadata,
+  ImportOutcome,
+  MigrationProgress
+} from '../../shared/ipc';
 import type { NotesProvider } from '../providers/provider';
 import { retryTransient } from './retry';
 
@@ -59,7 +64,10 @@ export class MigrationOrchestrator {
     this.cancelled = true;
   }
 
-  async importToTarget(bundle: ExportBundle): Promise<MigrationReport> {
+  async importToTarget(
+    bundle: ExportBundle,
+    observer?: (snapshot: MigrationProgress) => unknown
+  ): Promise<MigrationReport> {
     if (!this.confirmed) throw new Error('MIGRATION_NOT_CONFIRMED');
     const report: MigrationReport = {
       created: 0,
@@ -78,6 +86,7 @@ export class MigrationOrchestrator {
       const previous = await this.checkpoints.get(note.sourceId);
       if (previous?.status === 'created' && previous.contentHash === note.contentHash) {
         report.skipped += 1;
+        await emitMigrationProgress(observer, bundle.notes.length, report, note, 'skipped');
         continue;
       }
 
@@ -98,6 +107,19 @@ export class MigrationOrchestrator {
           targetId: created.targetId
         });
         report.created += 1;
+        await emitMigrationProgress(observer, bundle.notes.length, report, note, 'created');
+        for (const attachment of note.attachments) {
+          report.manualReview += 1;
+          await emitMigrationProgress(
+            observer,
+            bundle.notes.length,
+            report,
+            note,
+            'manual-review',
+            'VIVO_ATTACHMENT_UPLOAD_UNVERIFIED',
+            { filename: attachment.filename, mimeType: attachment.mimeType }
+          );
+        }
       } catch (error) {
         const errorClass = classifyMigrationError(error);
         const status = errorClass === 'ENCRYPTED_NOTE' ? 'manual-review' : 'failed';
@@ -109,11 +131,39 @@ export class MigrationOrchestrator {
         });
         if (status === 'manual-review') report.manualReview += 1;
         else report.failed += 1;
+        await emitMigrationProgress(observer, bundle.notes.length, report, note, status, errorClass);
       }
     }
 
     return report;
   }
+}
+
+async function emitMigrationProgress(
+  observer: ((snapshot: MigrationProgress) => unknown) | undefined,
+  total: number,
+  report: MigrationReport,
+  note: CanonicalNote,
+  outcome: ImportOutcome,
+  errorCode?: string,
+  attachment?: ImportAttachmentMetadata
+): Promise<void> {
+  await observer?.({
+    total,
+    completed: report.created + report.skipped + report.failed + report.manualReview,
+    created: report.created,
+    skipped: report.skipped,
+    failed: report.failed,
+    manualReview: report.manualReview,
+    current: {
+      sourceId: note.sourceId,
+      title: note.title || '无标题',
+      outcome,
+      ...(errorCode ? { errorCode } : {}),
+      ...(attachment ? { attachment } : {})
+    },
+    occurredAt: new Date().toISOString()
+  });
 }
 
 export async function exportProviderNotes(source: NotesProvider): Promise<ExportBundle> {

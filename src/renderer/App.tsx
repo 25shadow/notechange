@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react';
 import {
   AlertTriangle,
   CheckCircle2,
+  Clock3,
   Cloud,
   Download,
   Eye,
+  FolderOpen,
   LoaderCircle,
   LogIn,
   Trash2,
@@ -15,9 +17,12 @@ import type {
   CloudProvider,
   NoteChangeApi,
   RendererLoginState,
+  ImportHistoryTask,
+  ImportProgress
 } from '../shared/ipc';
 import type { LocalExportSummary } from '../shared/ipc';
 import { ExportPreviewDialog } from './ExportPreviewDialog';
+import { ImportHistoryDialog } from './ImportHistoryDialog';
 
 export type RendererMigrationApi = NoteChangeApi;
 
@@ -75,17 +80,22 @@ export function App({ api }: AppProps) {
   const [exportPickerOpen, setExportPickerOpen] = useState(false);
   const [importPickerOpen, setImportPickerOpen] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState<ImportProgress | null>(null);
+  const [importHistory, setImportHistory] = useState<ImportHistoryTask[]>([]);
+  const [historyDetail, setHistoryDetail] = useState<ImportHistoryTask | null>(null);
+  const [openingNoteCenter, setOpeningNoteCenter] = useState<CloudProvider | null>(null);
   const [logs, setLogs] = useState<LogEntry[]>([{ message: '应用已启动', time: formatTime(new Date()), kind: 'info' }]);
 
   const log = (message: string, kind: LogEntry['kind'] = 'info') => setLogs((current) => [{ message, time: formatTime(new Date()), kind }, ...current].slice(0, 6));
 
   useEffect(() => {
     let active = true;
-    void Promise.all([migrationApi.getLoginState('xiaomi'), migrationApi.getLoginState('vivo'), migrationApi.listExports()])
-      .then(async ([xiaomi, vivo, localExports]) => {
+    void Promise.all([migrationApi.getLoginState('xiaomi'), migrationApi.getLoginState('vivo'), migrationApi.listExports(), migrationApi.listImportHistory?.() ?? Promise.resolve([])])
+      .then(async ([xiaomi, vivo, localExports, tasks]) => {
         if (!active) return;
         setLogin({ xiaomi, vivo });
         setExports(localExports);
+        setImportHistory(tasks);
         const latest = localExports[0] ?? null;
         if (latest) {
           await migrationApi.selectExport(latest.batchId);
@@ -96,6 +106,20 @@ export function App({ api }: AppProps) {
       .catch(() => { if (active) { setError('无法读取登录状态，请重新连接账号。'); log('读取状态失败'); } });
     return () => { active = false; };
   }, [migrationApi]);
+
+  useEffect(() => {
+    const unsubscribe = migrationApi.onImportProgress?.((progress) => {
+      setImportProgress(progress);
+      setImporting(true);
+      if (progress.current) log(`正在导入：${progress.current.title}`);
+    });
+    return () => unsubscribe?.();
+  }, [migrationApi]);
+
+  const refreshImportHistory = async () => {
+    if (!migrationApi.listImportHistory) return;
+    setImportHistory(await migrationApi.listImportHistory());
+  };
 
   const connect = async (provider: CloudProvider) => {
     setError(null); setLoadingProvider(provider);
@@ -164,6 +188,7 @@ export function App({ api }: AppProps) {
   const importToVivo = async () => {
     setError(null);
     setImporting(true);
+    setImportProgress(null);
     try {
       await migrationApi.confirmMigration();
       const report = await migrationApi.startImport();
@@ -172,12 +197,38 @@ export function App({ api }: AppProps) {
       else if (report.manualReview > 0) log(`导入完成：${report.manualReview} 条笔记未导入`, 'info');
       else log(`导入成功：新增 ${report.created} 条`, 'success');
       setImportPickerOpen(false);
+      await refreshImportHistory();
       return report;
     } catch (cause) {
       log('导入失败', 'error');
       setError('导入失败，请检查 vivo 登录状态后重试。');
       throw cause;
-    } finally { setImporting(false); }
+    } finally { setImporting(false); setImportProgress(null); }
+  };
+
+  const openHistoryDetail = async (taskId: string) => {
+    try {
+      const task = await migrationApi.getImportHistory?.(taskId);
+      if (task) setHistoryDetail(task);
+    } catch { setError('无法读取导入历史详情。'); }
+  };
+
+  const openNoteCenter = async (provider: CloudProvider) => {
+    const providerName = provider === 'xiaomi' ? '小米云笔记' : 'vivo 原子笔记';
+    if (!migrationApi.openNoteCenter) {
+      setError('当前应用版本不支持打开笔记中心。');
+      log(`打开${providerName}笔记中心失败`, 'error');
+      return;
+    }
+    setOpeningNoteCenter(provider);
+    try {
+      await migrationApi.openNoteCenter(provider);
+      log(`已打开${providerName}笔记中心`, 'success');
+    } catch {
+      setError('无法打开笔记中心。');
+      log(`打开${providerName}笔记中心失败`, 'error');
+    }
+    finally { setOpeningNoteCenter(null); }
   };
 
   return (
@@ -192,8 +243,8 @@ export function App({ api }: AppProps) {
       </header>
 
       <section className="workspace" aria-label="云账号登录">
-        <ProviderPanel provider="xiaomi" name="小米云笔记" state={login.xiaomi} loading={loadingProvider === 'xiaomi'} onConnect={() => void connect('xiaomi')} />
-        <ProviderPanel provider="vivo" name="vivo 原子笔记" state={login.vivo} loading={loadingProvider === 'vivo'} onConnect={() => void connect('vivo')} />
+        <ProviderPanel provider="xiaomi" name="小米云笔记" state={login.xiaomi} loading={loadingProvider === 'xiaomi'} openingNoteCenter={openingNoteCenter === 'xiaomi'} onConnect={() => void connect('xiaomi')} onOpenNoteCenter={() => void openNoteCenter('xiaomi')} />
+        <ProviderPanel provider="vivo" name="vivo 原子笔记" state={login.vivo} loading={loadingProvider === 'vivo'} openingNoteCenter={openingNoteCenter === 'vivo'} onConnect={() => void connect('vivo')} onOpenNoteCenter={() => void openNoteCenter('vivo')} />
       </section>
 
       {error && <div className="error-banner" role="alert"><AlertTriangle size={17} />{error}</div>}
@@ -217,10 +268,17 @@ export function App({ api }: AppProps) {
         </div> : <div className="empty-state"><Download size={22} /><span>尚未生成导出批次</span></div>}
       </section>
 
+      <section className="migration-section history-section" aria-label="导入历史">
+        <div className="section-heading"><div><h2>导入历史</h2><p>{importHistory.length ? '本机保存的导入任务记录' : '尚无已保存的导入任务记录'}</p></div></div>
+        {importHistory.length ? <div className="preview-area"><table className="export-table history-table"><thead><tr><th>导入时间</th><th>状态</th><th>新增</th><th>问题</th><th>操作</th></tr></thead><tbody>{importHistory.map((task) => <tr key={task.taskId}><td data-label="导入时间">{formatDate(task.startedAt)}</td><td data-label="状态">{historyStatusLabel(task.status)}</td><td data-label="新增">{task.progress.created}</td><td data-label="问题">{task.progress.failed + task.progress.manualReview}</td><td data-label="操作"><button className="button compact secondary" aria-label={`查看导入详情 ${task.taskId}`} onClick={() => void openHistoryDetail(task.taskId)}><Eye size={15} />详情</button></td></tr>)}</tbody></table></div> : <div className="empty-state history-empty-state"><Clock3Icon /><span>尚无导入历史</span></div>}
+      </section>
+
       {previewOpen && selectedExport && <ExportPreviewDialog api={migrationApi} summary={selectedExport} onClose={() => setPreviewOpen(false)} />}
       {deleteTarget && <DeleteExportDialog summary={deleteTarget} deleting={deleting} onCancel={() => !deleting && setDeleteTarget(null)} onConfirm={() => void deleteExport()} />}
       {exportPickerOpen && <ExportPickerDialog xiaomiConnected={xiaomiConnected} scanning={scanning} onCancel={() => setExportPickerOpen(false)} onExportXiaomi={() => void scan()} />}
       {importPickerOpen && <ImportPickerDialog vivoConnected={login.vivo.authenticated} importing={importing} onCancel={() => !importing && setImportPickerOpen(false)} onImport={() => void importToVivo()} />}
+      {importProgress && <ImportProgressDialog progress={importProgress} logs={logs} onCancel={() => void migrationApi.cancelMigration()} />}
+      {historyDetail && <ImportHistoryDialog task={historyDetail} onClose={() => setHistoryDetail(null)} />}
     </main>
   );
 }
@@ -247,13 +305,17 @@ function ProviderPanel({
   name,
   state,
   loading,
-  onConnect
+  openingNoteCenter,
+  onConnect,
+  onOpenNoteCenter
 }: {
   provider: CloudProvider;
   name: string;
   state: RendererLoginState;
   loading: boolean;
+  openingNoteCenter: boolean;
   onConnect: () => void;
+  onOpenNoteCenter: () => void;
 }) {
   return (
     <article className={`provider provider-${provider}`}>
@@ -264,12 +326,30 @@ function ProviderPanel({
       </div>
       <div className="provider-status">
         {state.authenticated && <span className="connected"><CheckCircle2 size={16} />已登录</span>}
+        {state.authenticated && <button className="button compact secondary note-center-button" disabled={openingNoteCenter} onClick={onOpenNoteCenter} title="打开笔记中心" aria-label="打开笔记中心">{openingNoteCenter ? <LoaderCircle className="spin" size={16} /> : <FolderOpen size={16} />}打开笔记中心</button>}
         <button className="button compact secondary login-button" onClick={onConnect} title={`${state.authenticated ? '退出登录' : '登录'}${name}`} aria-label={`${state.authenticated ? '退出登录' : '登录'}${name}`}>
           {loading ? <LoaderCircle className="spin" size={16} /> : <LogIn size={16} />}{state.authenticated ? '退出登录' : '登录'}
         </button>
       </div>
     </article>
   );
+}
+
+function ImportProgressDialog({ progress, logs, onCancel }: { progress: ImportProgress; logs: LogEntry[]; onCancel: () => void }) {
+  const percentage = progress.total ? Math.min(100, Math.round((progress.completed / progress.total) * 100)) : 0;
+  return <div className="confirm-overlay" role="presentation"><section className="confirm-dialog import-progress-dialog" role="dialog" aria-modal="true" aria-label="正在导入笔记">
+    <div><h2>正在导入笔记</h2><p>{progress.current?.title ?? '正在准备导入任务'}</p></div>
+    <div className="progress-stats"><strong>{progress.completed} / {progress.total}</strong><span>新增 {progress.created} · 跳过 {progress.skipped} · 失败 {progress.failed} · 核对 {progress.manualReview}</span></div>
+    <div className="progress-track" role="progressbar" aria-valuemin={0} aria-valuemax={progress.total} aria-valuenow={progress.completed}><span style={{ width: `${percentage}%` }} /></div>
+    <div className="progress-log" aria-label="最近导入日志">{logs.slice(0, 3).map((entry, index) => <span key={`${entry.time}-${index}`}>{entry.message}</span>)}</div>
+    <div className="confirm-actions"><button className="button danger" onClick={onCancel}>取消导入</button></div>
+  </section></div>;
+}
+
+function Clock3Icon() { return <Clock3 size={22} />; }
+
+function historyStatusLabel(status: ImportHistoryTask['status']): string {
+  return { running: '正在导入', completed: '已完成', 'completed-with-issues': '完成但有问题', cancelled: '已取消', 'failed-to-start': '未能启动' }[status];
 }
 
 function DeleteExportDialog({

@@ -36,6 +36,16 @@ const canonicalNote = {
   warnings: []
 };
 
+function fixtureAttachment() {
+  return {
+    sourceId: 'image-1',
+    mimeType: 'image/png',
+    filename: 'synthetic.png',
+    sha256: 'b'.repeat(64),
+    localPath: '/synthetic/image'
+  };
+}
+
 function withVerifiedCreate(contract: ProviderContract): ProviderContract {
   return {
     ...contract,
@@ -104,28 +114,19 @@ describe('VivoProvider', () => {
     });
   });
 
-  it('不会静默丢弃尚未支持上传的图片附件', async () => {
+  it('creates a vivo note when source attachments are present', async () => {
     const executor = new FakeExecutor();
     const contract = withVerifiedCreate(parseProviderContract(vivoContractJson));
     const provider = new VivoProvider(new VivoApi(executor, contract));
 
     await expect(
-      provider.upsertNote(
-        {
-          ...canonicalNote,
-          attachments: [
-            {
-              sourceId: 'image-1',
-              mimeType: 'image/png',
-              filename: 'synthetic.png',
-              sha256: 'b'.repeat(64),
-              localPath: '/synthetic/image'
-            }
-          ]
-        },
-        '0'
-      )
-    ).rejects.toThrow('VIVO_ATTACHMENTS_UNSUPPORTED');
-    expect(executor.calls).toEqual([]);
+      provider.upsertNote({ ...canonicalNote, attachments: [fixtureAttachment()] }, '0')
+    ).resolves.toMatchObject({ targetId: expect.any(String) });
+    expect(executor.calls).toHaveLength(2);
+    expect(executor.calls.map(({ operation }) => operation)).toEqual(['getSyncState', 'createSync']);
+    expect(executor.calls[1]).toMatchObject({
+      operation: 'createSync',
+      payload: { resources: [] }
+    });
   });
 });

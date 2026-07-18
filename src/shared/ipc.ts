@@ -66,6 +66,70 @@ export type RendererMigrationReport = {
   cancelled: boolean;
 };
 
+export type ImportOutcome = 'created' | 'skipped' | 'failed' | 'manual-review';
+
+export type ImportAttachmentMetadata = {
+  filename: string;
+  mimeType: string;
+};
+
+export type ImportTaskStatus =
+  | 'running'
+  | 'completed'
+  | 'completed-with-issues'
+  | 'cancelled'
+  | 'failed-to-start';
+
+export type ImportProgress = {
+  taskId: string;
+  total: number;
+  completed: number;
+  created: number;
+  skipped: number;
+  failed: number;
+  manualReview: number;
+  current: {
+    sourceId: string;
+    title: string;
+    outcome?: ImportOutcome;
+    errorCode?: string;
+    attachment?: ImportAttachmentMetadata;
+  } | null;
+  occurredAt: string;
+};
+
+export type MigrationProgress = Omit<ImportProgress, 'taskId'>;
+
+export type ImportFailure = {
+  sourceId: string;
+  title: string;
+  outcome: 'failed' | 'manual-review';
+  errorCode: string;
+  message: string;
+  attachment?: ImportAttachmentMetadata;
+  occurredAt: string;
+};
+
+export type ImportHistoryLog = {
+  occurredAt: string;
+  message: string;
+  kind: 'info' | 'success' | 'error';
+};
+
+export type ImportHistoryTask = {
+  schemaVersion: 1;
+  taskId: string;
+  batchId: string;
+  source: 'xiaomi';
+  target: 'vivo';
+  status: ImportTaskStatus;
+  startedAt: string;
+  completedAt: string | null;
+  progress: ImportProgress;
+  logs: ImportHistoryLog[];
+  failures: ImportFailure[];
+};
+
 export interface NoteChangeApi {
   getLoginState(provider: CloudProvider): Promise<RendererLoginState>;
   startLogin(provider: CloudProvider): Promise<RendererLoginState>;
@@ -81,6 +145,10 @@ export interface NoteChangeApi {
   confirmMigration(): Promise<void>;
   startImport(): Promise<RendererMigrationReport>;
   cancelMigration(): Promise<void>;
+  openNoteCenter?(provider: CloudProvider): Promise<void>;
+  listImportHistory?(): Promise<ImportHistoryTask[]>;
+  getImportHistory?(taskId: string): Promise<ImportHistoryTask | null>;
+  onImportProgress?(listener: (progress: ImportProgress) => void): () => void;
 }
 
 export const ipcChannels = {
@@ -97,5 +165,9 @@ export const ipcChannels = {
   getExportAttachment: 'notechange:get-export-attachment',
   confirmMigration: 'notechange:confirm-migration',
   startImport: 'notechange:start-import',
-  cancelMigration: 'notechange:cancel-migration'
+  cancelMigration: 'notechange:cancel-migration',
+  openNoteCenter: 'notechange:open-note-center',
+  listImportHistory: 'notechange:list-import-history',
+  getImportHistory: 'notechange:get-import-history',
+  importProgress: 'notechange:import-progress'
 } as const;

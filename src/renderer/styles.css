@@ -50,6 +50,9 @@ button:focus-visible, input:focus-visible { outline: 3px solid rgba(47, 93, 140,
 .button.danger { border-color: #d7aaa1; color: #963f30; background: #fff8f6; }
 .button.danger.solid { border-color: #a34331; color: #fff; background: #a34331; }
 .button:not(:disabled):hover { filter: brightness(0.96); }
+.icon-button { width: 32px; height: 32px; display: inline-grid; place-items: center; padding: 0; border: 1px solid #bcc6c0; border-radius: 7px; color: #34413b; background: #f8faf9; cursor: pointer; }
+.icon-button:disabled { cursor: not-allowed; opacity: 0.45; }
+.icon-button:not(:disabled):hover { background: #edf3ef; }
 
 .preview-area { border: 1px solid #d2d9d5; border-radius: 8px; overflow: hidden; background: #f8faf9; }
 .export-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
@@ -69,7 +72,38 @@ button:focus-visible, input:focus-visible { outline: 3px solid rgba(47, 93, 140,
 .report-summary { margin-right: auto; display: flex; align-items: center; gap: 7px; color: #28654e; font-size: 13px; font-weight: 700; }
 .report-summary span { margin-left: 6px; color: #75807a; font-size: 11px; font-weight: 500; }
 .empty-state { min-height: 122px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; border: 1px dashed #c5cdc8; color: #89938e; font-size: 12px; }
+.history-section { margin-top: 32px; }
+.history-empty-state { min-height: 76px; flex-direction: row; }
+.history-table th:nth-child(1) { width: 31%; }
+.history-table th:nth-child(2) { width: 24%; }
+.history-table th:last-child { width: 100px; }
 .spin { animation: spin 0.85s linear infinite; }
+
+.import-progress-dialog { width: min(460px, calc(100vw - 32px)); }
+.progress-stats { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; color: #6f7974; font-size: 12px; }
+.progress-stats strong { color: #1f5745; font-size: 18px; font-variant-numeric: tabular-nums; }
+.progress-track { height: 8px; overflow: hidden; border-radius: 4px; background: #dde5e0; }
+.progress-track span { display: block; height: 100%; border-radius: inherit; background: #267052; transition: width 160ms ease; }
+.progress-log { display: grid; gap: 3px; min-height: 42px; padding: 8px 10px; border-left: 2px solid #b9cec1; color: #617068; background: #f4f7f5; font-size: 11px; }
+.progress-log span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.import-history-dialog { width: min(820px, calc(100vw - 32px)); max-height: min(720px, calc(100vh - 32px)); }
+.history-summary { display: flex; flex-wrap: wrap; gap: 16px; padding: 13px 22px; border-bottom: 1px solid #dce2de; color: #5f6d66; font-size: 12px; }
+.history-summary span { display: inline-flex; align-items: center; gap: 5px; }
+.history-summary span:first-child { color: #267052; font-weight: 700; }
+.history-content { overflow: auto; padding: 20px 22px 24px; }
+.history-block + .history-block { margin-top: 24px; }
+.history-block h3 { display: flex; align-items: center; gap: 7px; margin: 0 0 10px; color: #34413b; font-size: 13px; }
+.history-log-list { display: grid; gap: 5px; margin: 0; padding: 0; list-style: none; }
+.history-log-list li { display: grid; grid-template-columns: 70px minmax(0, 1fr); gap: 10px; padding: 7px 9px; border-left: 2px solid #c6d8ce; color: #4f5f57; background: #f5f8f6; font-size: 12px; }
+.history-log-list time { color: #7b8680; font-variant-numeric: tabular-nums; }
+.history-log-error { border-left-color: #c6543f !important; color: #843829 !important; }
+.history-empty { margin: 0; color: #7a8580; font-size: 12px; }
+.history-failure-table { width: 100%; border-collapse: collapse; table-layout: fixed; border: 1px solid #d9dfdb; font-size: 12px; }
+.history-failure-table th { padding: 9px 10px; color: #69746e; background: #f0f3f1; text-align: left; font-size: 10px; }
+.history-failure-table td { padding: 10px; border-top: 1px solid #e0e5e2; color: #46534d; overflow-wrap: anywhere; vertical-align: top; }
+.history-failure-table th:nth-child(1) { width: 28%; }.history-failure-table th:nth-child(2) { width: 18%; }
+.history-failure-table small { display: block; margin-top: 4px; color: #8b958f; font-family: ui-monospace, "SFMono-Regular", Menlo, monospace; font-size: 10px; }
 
 .preview-overlay { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 24px; background: rgba(20, 28, 24, 0.42); }
 .preview-dialog { width: min(1120px, 100%); height: min(760px, calc(100vh - 48px)); display: grid; grid-template-rows: 68px 58px minmax(0, 1fr); overflow: hidden; border: 1px solid #bfc8c2; border-radius: 8px; background: #f7f9f8; box-shadow: 0 24px 70px rgba(16, 28, 22, 0.2); }

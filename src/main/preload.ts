@@ -24,7 +24,16 @@ const api: NoteChangeApi = {
     ipcRenderer.invoke(ipcChannels.getExportAttachment, request),
   confirmMigration: () => ipcRenderer.invoke(ipcChannels.confirmMigration),
   startImport: () => ipcRenderer.invoke(ipcChannels.startImport),
-  cancelMigration: () => ipcRenderer.invoke(ipcChannels.cancelMigration)
+  cancelMigration: () => ipcRenderer.invoke(ipcChannels.cancelMigration),
+  openNoteCenter: (provider) => ipcRenderer.invoke(ipcChannels.openNoteCenter, provider),
+  listImportHistory: () => ipcRenderer.invoke(ipcChannels.listImportHistory),
+  getImportHistory: (taskId) => ipcRenderer.invoke(ipcChannels.getImportHistory, taskId),
+  onImportProgress: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, progress: Parameters<typeof listener>[0]) =>
+      listener(progress);
+    ipcRenderer.on(ipcChannels.importProgress, handler);
+    return () => ipcRenderer.removeListener(ipcChannels.importProgress, handler);
+  }
 };
 
 contextBridge.exposeInMainWorld('notechange', api);
