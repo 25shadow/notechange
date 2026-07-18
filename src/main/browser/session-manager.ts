@@ -2,7 +2,11 @@ import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import type { BrowserFingerprintWithHeaders } from 'fingerprint-generator';
+import { FingerprintInjector } from 'fingerprint-injector';
 import { chromium, type BrowserContext, type Page } from 'playwright';
+
+import { FingerprintStore } from './fingerprint-store';
 
 type PersistentContextOptions = NonNullable<
   Parameters<typeof chromium.launchPersistentContext>[1]
@@ -13,6 +17,18 @@ export interface PersistentContextLauncher {
     userDataDirectory: string,
     options: PersistentContextOptions
   ): Promise<BrowserContext>;
+}
+
+export interface ProviderFingerprintStore {
+  loadOrCreate(directory: string): Promise<BrowserFingerprintWithHeaders>;
+  remove(directory: string): Promise<void>;
+}
+
+export interface FingerprintInjectorAdapter {
+  attachFingerprintToPlaywright(
+    context: BrowserContext,
+    fingerprint: BrowserFingerprintWithHeaders
+  ): Promise<void>;
 }
 
 type ManagedContext = {
@@ -34,12 +50,19 @@ const sessionFileName = 'notechange-session.json';
 export class SessionManager {
   private readonly contexts = new Map<string, ManagedContext>();
   private readonly pendingOpens = new Map<string, Promise<Page>>();
+  private fingerprints: ProviderFingerprintStore | undefined;
+  private injector: FingerprintInjectorAdapter | undefined;
 
   constructor(
     private readonly launchOptions: PersistentContextOptions = { headless: false },
     private readonly rootDirectory = join(tmpdir(), 'notechange-browser'),
-    private readonly launcher: PersistentContextLauncher = chromium
-  ) {}
+    private readonly launcher: PersistentContextLauncher = chromium,
+    fingerprints?: ProviderFingerprintStore,
+    injector?: FingerprintInjectorAdapter
+  ) {
+    this.fingerprints = fingerprints;
+    this.injector = injector;
+  }
 
   async open(provider: string, url: string, mode: BrowserMode = 'headed'): Promise<Page> {
     const pending = this.pendingOpens.get(provider);
@@ -95,13 +118,20 @@ export class SessionManager {
     const managed = this.contexts.get(provider);
     if (managed) {
       this.contexts.delete(provider);
-      await managed.context.clearCookies();
-      await managed.context.close();
-      await rm(join(managed.userDataDirectory, sessionFileName), { force: true });
+      await this.runCleanup([
+        () => managed.context.clearCookies(),
+        () => managed.context.close(),
+        () => rm(join(managed.userDataDirectory, sessionFileName), { force: true }),
+        () => this.getFingerprints().remove(managed.userDataDirectory)
+      ]);
       return;
     }
     const safeProvider = provider.replace(/[^a-z0-9_-]/gi, '_');
-    await rm(join(this.rootDirectory, safeProvider, sessionFileName), { force: true });
+    const userDataDirectory = join(this.rootDirectory, safeProvider);
+    await this.runCleanup([
+      () => rm(join(userDataDirectory, sessionFileName), { force: true }),
+      () => this.getFingerprints().remove(userDataDirectory)
+    ]);
   }
 
   private async switchMode(provider: string, url: string, mode: BrowserMode): Promise<Page> {
@@ -125,11 +155,18 @@ export class SessionManager {
     let context: BrowserContext | null = null;
     try {
       const { channel: _channel, ...embeddedBrowserOptions } = this.launchOptions;
+      const fingerprint = await this.getFingerprints().loadOrCreate(userDataDirectory);
       const options: PersistentContextOptions = {
         ...embeddedBrowserOptions,
-        headless: mode === 'headless'
+        headless: mode === 'headless',
+        userAgent: fingerprint.fingerprint.navigator.userAgent,
+        viewport: {
+          width: fingerprint.fingerprint.screen.width,
+          height: fingerprint.fingerprint.screen.height
+        }
       };
       context = await this.launcher.launchPersistentContext(userDataDirectory, options);
+      await this.getInjector().attachFingerprintToPlaywright(context, fingerprint);
       await context.addCookies(cookies ?? (await this.loadCookies(userDataDirectory)));
       const page = context.pages()[0] ?? (await context.newPage());
       await page.goto(url, { waitUntil: 'domcontentloaded' });
@@ -153,6 +190,30 @@ export class SessionManager {
     } finally {
       await managed.context.close();
     }
+  }
+
+  private getFingerprints(): ProviderFingerprintStore {
+    return (this.fingerprints ??= new FingerprintStore());
+  }
+
+  private getInjector(): FingerprintInjectorAdapter {
+    return (this.injector ??= new FingerprintInjector());
+  }
+
+  private async runCleanup(operations: Array<() => Promise<void>>): Promise<void> {
+    let firstError: unknown;
+    let failed = false;
+    for (const operation of operations) {
+      try {
+        await operation();
+      } catch (error) {
+        if (!failed) {
+          firstError = error;
+          failed = true;
+        }
+      }
+    }
+    if (failed) throw firstError;
   }
 
   private async loadCookies(userDataDirectory: string): Promise<BrowserCookies> {

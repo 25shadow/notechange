@@ -1,3 +1,5 @@
+// @vitest-environment node
+
 import { createServer, type Server } from 'node:http';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
