@@ -16,7 +16,6 @@ button:focus-visible, input:focus-visible { outline: 3px solid rgba(47, 93, 140,
 .brand-mark { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 8px; color: #fff; background: #1f5745; }
 .topbar h1 { margin: 0; font-size: 18px; line-height: 1.25; letter-spacing: 0; }
 .topbar p { margin: 3px 0 0; color: #68726d; font-size: 12px; letter-spacing: 0; }
-.privacy-status { margin-left: auto; display: flex; align-items: center; gap: 6px; color: #346c58; font-size: 12px; font-weight: 650; }
 .operation-log { margin-left: auto; min-width: 250px; max-width: 420px; display: flex; align-items: center; gap: 10px; padding: 9px 12px; border: 1px solid #d4dad6; border-radius: 7px; color: #5e6b64; background: #f8faf9; font-size: 11px; }
 .operation-log strong { color: #1f5745; font-size: 11px; white-space: nowrap; }
 .operation-log-list { min-width: 0; display: grid; gap: 2px; overflow: hidden; }
@@ -36,8 +35,6 @@ button:focus-visible, input:focus-visible { outline: 3px solid rgba(47, 93, 140,
 .provider-copy p { margin: 5px 0 0; color: #77817c; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .provider-status { margin-left: auto; display: flex; align-items: center; gap: 10px; }
 .connected { display: inline-flex; align-items: center; gap: 5px; color: #267052; font-size: 12px; font-weight: 700; }
-.icon-command { margin-left: auto; width: 36px; height: 36px; display: grid; place-items: center; border: 1px solid #cbd2ce; border-radius: 7px; color: #34413b; background: #fff; cursor: pointer; }
-.icon-command:hover { border-color: #89958f; }
 
 
 .error-banner { max-width: 1000px; margin: 16px auto 0; display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-left: 3px solid #c6543f; color: #843829; background: #f8eae6; font-size: 13px; }
@@ -95,15 +92,12 @@ button:focus-visible, input:focus-visible { outline: 3px solid rgba(47, 93, 140,
 .preview-list-item > span { overflow: hidden; color: #758078; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .preview-list-item small { display: flex; align-items: center; gap: 10px; color: #8a948e; font-size: 10px; }
 .preview-list-item em { display: inline-flex; align-items: center; gap: 3px; color: #3567a8; font-style: normal; }
-.preview-list-item em.warning { color: #a34331; }
 .preview-pagination { display: flex; align-items: center; justify-content: center; gap: 12px; border-top: 1px solid #d7ddd9; color: #748079; font-size: 11px; background: #f7f9f8; }
 .preview-pagination .preview-icon-button { width: 30px; height: 30px; flex-basis: 30px; }
 .preview-detail { min-width: 0; min-height: 0; overflow-y: auto; padding: 24px 28px 40px; background: #fff; }
 .preview-detail-heading { padding-bottom: 16px; border-bottom: 1px solid #e0e5e2; }
 .preview-detail-heading h3 { margin: 0; font-size: 20px; line-height: 1.35; letter-spacing: 0; overflow-wrap: anywhere; }
 .preview-detail-heading p { margin: 7px 0 0; color: #7b8680; font-size: 11px; }
-.preview-warning-list { display: flex; flex-wrap: wrap; gap: 7px; padding-top: 14px; }
-.preview-warning-list span { display: inline-flex; align-items: center; gap: 5px; padding: 5px 8px; border-left: 2px solid #c6543f; color: #843829; background: #f8eae6; font-size: 11px; }
 .preview-note-content { min-height: 220px; padding: 22px 0; color: #29342f; font-size: 13px; line-height: 1.75; overflow-wrap: anywhere; }
 .preview-note-text { white-space: pre-wrap; }
 .preview-inline-attachment { margin: 12px 0 16px; }
@@ -129,19 +123,12 @@ button:focus-visible, input:focus-visible { outline: 3px solid rgba(47, 93, 140,
 
 @media (max-width: 760px) {
   .app-shell { padding: 0 16px 28px; }
-  .privacy-status { display: none; }
 
   .workspace { grid-template-columns: 1fr; gap: 10px; }
 
   .section-heading { align-items: flex-start; flex-direction: column; padding: 18px 0; }
   .section-heading .button { width: 100%; }
 
-
-
-
-  .action-row { align-items: stretch; flex-direction: column; padding: 16px; }
-  .action-row .button { width: 100%; }
-  .report-summary { flex-wrap: wrap; }
   .export-table, .export-table tbody, .export-table tr, .export-table td { display: block; width: 100%; }
   .export-table thead { display: none; }
   .export-table tr { padding: 10px 14px; border-bottom: 1px solid #dce2de; }
