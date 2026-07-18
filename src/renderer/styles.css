@@ -12,11 +12,14 @@ button, input { font: inherit; }
 button:focus-visible, input:focus-visible { outline: 3px solid rgba(47, 93, 140, 0.25); outline-offset: 2px; }
 
 .app-shell { min-height: 100vh; padding: 0 32px 40px; }
-.topbar { height: 76px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #d5dbd7; }
+.topbar { min-height: 76px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #d5dbd7; }
 .brand-mark { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 8px; color: #fff; background: #1f5745; }
 .topbar h1 { margin: 0; font-size: 18px; line-height: 1.25; letter-spacing: 0; }
 .topbar p { margin: 3px 0 0; color: #68726d; font-size: 12px; letter-spacing: 0; }
 .privacy-status { margin-left: auto; display: flex; align-items: center; gap: 6px; color: #346c58; font-size: 12px; font-weight: 650; }
+.operation-log { margin-left: auto; min-width: 250px; max-width: 420px; display: flex; align-items: center; gap: 10px; padding: 9px 12px; border: 1px solid #d4dad6; border-radius: 7px; color: #5e6b64; background: #f8faf9; font-size: 11px; }
+.operation-log strong { color: #1f5745; font-size: 11px; white-space: nowrap; }
+.operation-log span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .stepbar { max-width: 760px; margin: 24px auto 28px; display: grid; grid-template-columns: repeat(4, 1fr); position: relative; }
 .stepbar::before { content: ""; position: absolute; left: 10%; right: 10%; top: 14px; height: 1px; background: #cbd2ce; }
@@ -25,7 +28,7 @@ button:focus-visible, input:focus-visible { outline: 3px solid rgba(47, 93, 140,
 .step.active { color: #1f5745; }
 .step.active > span { color: #fff; border-color: #1f5745; background: #1f5745; }
 
-.workspace { max-width: 1000px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr) 150px minmax(0, 1fr); align-items: center; }
+.workspace { max-width: 1000px; margin: 24px auto 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: stretch; }
 .provider { min-height: 104px; display: flex; align-items: center; gap: 14px; padding: 20px; border: 1px solid #d4dad6; border-radius: 8px; background: #f8faf9; }
 .provider-logo { width: 44px; height: 44px; flex: 0 0 44px; display: grid; place-items: center; border-radius: 8px; color: #fff; font-family: ui-monospace, "SFMono-Regular", Menlo, monospace; font-size: 15px; font-weight: 800; }
 .provider-xiaomi .provider-logo { background: #e85d2a; }
@@ -134,6 +137,9 @@ button:focus-visible, input:focus-visible { outline: 3px solid rgba(47, 93, 140,
 .confirm-dialog p { margin: 7px 0 0; color: #75807a; font-size: 11px; }
 .confirm-warning { grid-column: 1 / -1; padding: 11px 12px; border-left: 3px solid #c6543f; color: #713428; background: #fbefec; font-size: 12px; line-height: 1.6; }
 .confirm-actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 10px; padding-top: 2px; }
+.picker-dialog { grid-template-columns: 1fr; border-color: #cbd6d0; }
+.picker-options { display: grid; gap: 10px; }
+.picker-options .button { justify-content: flex-start; width: 100%; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }

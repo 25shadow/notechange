@@ -54,46 +54,33 @@ function xiaomiOnlyApi(): RendererMigrationApi {
 }
 
 describe('小米到 vivo 迁移工作区', () => {
-  it('导出预览并在明确确认前禁用导入', async () => {
+  it('显示中文登录状态并通过平台选择导出小米笔记', async () => {
     const api = fakeApi();
     render(<App api={api} />);
 
     await waitFor(() =>
-      expect(screen.getAllByText('已连接')).toHaveLength(2)
+      expect(screen.getAllByText('已登录')).toHaveLength(2)
     );
-    fireEvent.click(screen.getByRole('button', { name: '导出小米笔记' }));
+    fireEvent.click(screen.getByRole('button', { name: '导出笔记' }));
+    expect(await screen.findByRole('dialog', { name: '选择导出平台' })).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: '小米云笔记' }));
 
     const statistics = await screen.findByRole('table', { name: '本地导出批次' });
     expect(within(statistics).getByText('12')).toBeTruthy();
     expect(within(statistics).getByText('4')).toBeTruthy();
-    expect(within(statistics).getByText('2')).toBeTruthy();
-    const importButton = screen.getByRole('button', { name: '导入 vivo' });
-    expect(importButton).toBeDisabled();
-
-    fireEvent.click(
-      screen.getByRole('checkbox', { name: '我已核对目标账号和迁移数量' })
-    );
-    expect(importButton).toBeEnabled();
-    fireEvent.click(importButton);
-
-    await waitFor(() => expect(api.confirmMigration).toHaveBeenCalledOnce());
-    await waitFor(() => expect(api.startImport).toHaveBeenCalledOnce());
-    expect(await screen.findByText('已创建 10 条')).toBeTruthy();
+    expect(within(statistics).queryByText('需处理')).toBeNull();
+    expect(screen.queryByRole('checkbox', { name: '我已核对目标账号和迁移数量' })).toBeNull();
+    expect(screen.getByText('小米笔记导出成功')).toBeVisible();
   });
 
   it('小米登录后立即允许导出，但 vivo 未登录时禁止导入', async () => {
     const api = xiaomiOnlyApi();
     render(<App api={api} />);
 
-    await waitFor(() => expect(screen.getAllByText('已连接')).toHaveLength(1));
-    expect(screen.getByRole('button', { name: '导出小米笔记' })).toBeEnabled();
-    fireEvent.click(screen.getByRole('button', { name: '导出小米笔记' }));
-    await screen.findByRole('table', { name: '本地导出批次' });
-    fireEvent.click(
-      screen.getByRole('checkbox', { name: '我已核对目标账号和迁移数量' })
-    );
-
-    expect(screen.getByRole('button', { name: '导入 vivo' })).toBeDisabled();
+    await waitFor(() => expect(screen.getAllByText('已登录')).toHaveLength(1));
+    expect(screen.getByRole('button', { name: '导出笔记' })).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: '导出笔记' }));
+    expect(screen.getByRole('button', { name: /vivo 原子笔记（暂未支持）/ })).toBeDisabled();
   });
 
   it('展示历史批次并在确认后只删除所选批次', async () => {
