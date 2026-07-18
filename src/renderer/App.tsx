@@ -146,7 +146,7 @@ export function App({ api }: AppProps) {
       const report = await migrationApi.startImport();
       if (report.cancelled) log('导入已取消');
       else if (report.failed > 0) { log(`导入完成但有失败：${report.failed} 条`, 'error'); setError(`导入完成但有 ${report.failed} 条失败。`); }
-      else if (report.manualReview > 0) log(`导入完成，${report.manualReview} 条需人工处理`, 'info');
+      else if (report.manualReview > 0) log(`导入完成：${report.manualReview} 条笔记未导入`, 'info');
       else log(`导入成功：新增 ${report.created} 条`, 'success');
       return report;
     } catch (cause) {

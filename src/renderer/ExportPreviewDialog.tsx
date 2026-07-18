@@ -318,6 +318,6 @@ function formatDate(value: string | null): string {
 function formatImportReport(report: RendererMigrationReport): string {
   if (report.cancelled) return `导入已取消：新增 ${report.created} 条，跳过 ${report.skipped} 条`;
   if (report.failed > 0) return `导入完成但有失败：新增 ${report.created} 条，失败 ${report.failed} 条，跳过 ${report.skipped} 条`;
-  if (report.manualReview > 0) return `导入完成，${report.manualReview} 条需人工处理：新增 ${report.created} 条，跳过 ${report.skipped} 条`;
+  if (report.manualReview > 0) return `导入完成：${report.manualReview} 条笔记未导入；新增 ${report.created} 条，跳过 ${report.skipped} 条`;
   return `导入完成：新增 ${report.created} 条，跳过 ${report.skipped} 条`;
 }
