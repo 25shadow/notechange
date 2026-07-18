@@ -9,6 +9,7 @@ import { ensureLicenseConfiguration, readPublicKey } from './key-store.mjs';
 import { createAdminSession, hasAdminPassword, hasAdminSession, setAdminPassword, verifyAdminPassword } from './admin-auth.mjs';
 import { readArtifact, storeArtifact } from './artifact-store.mjs';
 import { renderAdminConsole } from './admin-console.mjs';
+import { npmInstallCommand } from './npm-install.mjs';
 import { updateRestartExitCode } from './restart-policy.mjs';
 
 const port = Number(process.env.LICENSE_PORT || 8787);
@@ -120,7 +121,7 @@ async function admin(request, response, url) {
     if (!Number.isInteger(quantity) || quantity < 1 || quantity > 500) return json(response, 400, { error: 'INVALID_QUANTITY' });
     const created = Array.from({ length: quantity }, () => {
       const code = createCode();
-      const record = { id: randomUUID(), hash: digest(code), note: String(note).slice(0, 200), createdAt: new Date().toISOString(), revoked: false, installationId: null, activatedAt: null, licenseId: null };
+      const record = { id: randomUUID(), code, hash: digest(code), note: String(note).slice(0, 200), createdAt: new Date().toISOString(), revoked: false, installationId: null, activatedAt: null, licenseId: null };
       database.codes.push(record); return { ...publicRecord(record), code };
     });
     await saveDatabase(); return json(response, 201, { codes: created });
@@ -132,6 +133,14 @@ async function admin(request, response, url) {
     if (match[2] === 'revoke') record.revoked = true;
     else { record.installationId = null; record.activatedAt = null; record.licenseId = null; }
     await saveDatabase(); return json(response, 200, { code: publicRecord(record) });
+  }
+  const deleteMatch = url.pathname.match(/^\/v1\/admin\/codes\/([a-f0-9]{64})$/);
+  if (request.method === 'DELETE' && deleteMatch) {
+    const index = database.codes.findIndex((item) => item.hash === deleteMatch[1]);
+    if (index === -1) return json(response, 404, { error: 'LICENSE_NOT_FOUND' });
+    database.codes.splice(index, 1);
+    await saveDatabase();
+    return json(response, 200, { ok: true });
   }
   return json(response, 404, { error: 'NOT_FOUND' });
 }
@@ -218,13 +227,13 @@ async function applySourceUpdate(response) {
 }
 
 function runNpmInstall() {
-  if (process.env.npm_execpath) return runUpdateCommand(process.execPath, [process.env.npm_execpath, 'ci'], 'npm ci');
-  return runUpdateCommand('npm', ['ci']);
+  const command = npmInstallCommand(dataDir);
+  return runUpdateCommand(command.command, command.args, command.displayCommand, command.env);
 }
 
-function runUpdateCommand(command, args, displayCommand = `${command} ${args.join(' ')}`) {
+function runUpdateCommand(command, args, displayCommand = `${command} ${args.join(' ')}`, environment = process.env) {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { cwd: process.cwd(), env: process.env, shell: false });
+    const child = spawn(command, args, { cwd: process.cwd(), env: environment, shell: false });
     let output = '';
     let launched = true;
     const capture = (chunk) => { output += chunk.toString(); if (output.length > 12000) output = output.slice(-12000); };
