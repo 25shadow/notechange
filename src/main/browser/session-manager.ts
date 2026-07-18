@@ -124,11 +124,12 @@ export class SessionManager {
   ): Promise<Page> {
     let context: BrowserContext | null = null;
     try {
+      const { channel: _channel, ...embeddedBrowserOptions } = this.launchOptions;
       const options: PersistentContextOptions = {
-        ...this.launchOptions,
+        ...embeddedBrowserOptions,
         headless: mode === 'headless'
       };
-      context = await this.launchWithFallback(userDataDirectory, options);
+      context = await this.launcher.launchPersistentContext(userDataDirectory, options);
       await context.addCookies(cookies ?? (await this.loadCookies(userDataDirectory)));
       const page = context.pages()[0] ?? (await context.newPage());
       await page.goto(url, { waitUntil: 'domcontentloaded' });
@@ -140,19 +141,6 @@ export class SessionManager {
     } catch (error) {
       await context?.close().catch(() => undefined);
       throw error;
-    }
-  }
-
-  private async launchWithFallback(
-    userDataDirectory: string,
-    options: PersistentContextOptions
-  ): Promise<BrowserContext> {
-    try {
-      return await this.launcher.launchPersistentContext(userDataDirectory, options);
-    } catch (error) {
-      if (options.channel !== 'chrome' || !isChromeUnavailable(error)) throw error;
-      const { channel: _channel, ...fallbackOptions } = options;
-      return this.launcher.launchPersistentContext(userDataDirectory, fallbackOptions);
     }
   }
 
@@ -191,9 +179,4 @@ export class SessionManager {
     });
     await rename(temporaryFile, sessionFile);
   }
-}
-
-function isChromeUnavailable(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return /chrome.*(not found|doesn't exist)|executable doesn't exist|install chrome/i.test(message);
 }

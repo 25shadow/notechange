@@ -160,23 +160,21 @@ describe('SessionManager headless transition', () => {
     await manager.disposeAll();
   });
 
-  it('系统 Chrome 缺失时回退到 Playwright 自带 Chromium', async () => {
+  it('忽略 Chrome channel，始终使用应用内置 Chromium', async () => {
     const root = await mkdtemp(join(tmpdir(), 'notechange-session-test-'));
     directories.push(root);
     const context = fakeContext(fakePage());
     const launcher = {
       launchPersistentContext: vi
         .fn()
-        .mockRejectedValueOnce(new Error("Executable doesn't exist at /Applications/Google Chrome.app"))
         .mockResolvedValueOnce(context)
     };
     const manager = new SessionManager({ headless: false, channel: 'chrome' }, root, launcher);
 
     await manager.open('xiaomi', 'https://i.mi.com/note/h5#/');
 
-    expect(launcher.launchPersistentContext).toHaveBeenCalledTimes(2);
-    expect(launcher.launchPersistentContext.mock.calls[0][1]).toMatchObject({ channel: 'chrome' });
-    expect(launcher.launchPersistentContext.mock.calls[1][1]).not.toHaveProperty('channel');
+    expect(launcher.launchPersistentContext).toHaveBeenCalledOnce();
+    expect(launcher.launchPersistentContext.mock.calls[0][1]).not.toHaveProperty('channel');
     await manager.disposeAll();
   });
 
