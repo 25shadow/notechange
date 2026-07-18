@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import {
-  AlertTriangle,
   ChevronLeft,
   ChevronRight,
   LoaderCircle,
@@ -37,6 +36,14 @@ export function ExportPreviewDialog({
   const [detail, setDetail] = useState<ExportPreviewDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [importPickerOpen, setImportPickerOpen] = useState(false);
+  const [vivoLogin, setVivoLogin] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<string | null>(null);
+
+  useEffect(() => {
+    void api.getLoginState('vivo').then((state) => setVivoLogin(state.authenticated)).catch(() => setVivoLogin(false));
+  }, [api]);
 
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => {
@@ -118,7 +125,6 @@ export function ExportPreviewDialog({
           <div className="preview-filters" aria-label="笔记筛选">
             {([
               ['all', '全部'],
-              ['warnings', '需处理'],
               ['attachments', '有附件']
             ] as const).map(([value, label]) => (
               <button
@@ -135,6 +141,7 @@ export function ExportPreviewDialog({
 
         <div className="preview-workspace">
           <aside className="preview-index" aria-label="导出笔记列表">
+            <button className="button primary preview-import-button" onClick={() => setImportPickerOpen(true)}>导入</button>
             <div className="preview-index-count">{page.total} 条结果</div>
             <div className="preview-list">
               {loading ? (
@@ -155,7 +162,6 @@ export function ExportPreviewDialog({
                     <small>
                       {formatDate(item.modifiedAt)}
                       {item.attachmentCount > 0 && <em><Paperclip size={12} />{item.attachmentCount}</em>}
-                      {item.warningCount > 0 && <em className="warning"><AlertTriangle size={12} />{item.warningCount}</em>}
                     </small>
                   </button>
                 ))
@@ -185,13 +191,6 @@ export function ExportPreviewDialog({
                   <h3>{detail.title}</h3>
                   <p>创建 {formatDate(detail.createdAt)} · 修改 {formatDate(detail.modifiedAt)}</p>
                 </div>
-                {detail.warnings.length > 0 && (
-                  <div className="preview-warning-list">
-                    {detail.warnings.map((warning) => (
-                      <span key={`${warning.code}-${warning.message}`}><AlertTriangle size={14} />{warning.message}</span>
-                    ))}
-                  </div>
-                )}
                 <PreviewNoteContent
                   api={api}
                   batchId={summary?.batchId ?? ''}
@@ -204,6 +203,24 @@ export function ExportPreviewDialog({
           </article>
         </div>
       </section>
+      {importPickerOpen && (
+        <div className="confirm-overlay" role="presentation">
+          <section className="confirm-dialog picker-dialog" role="dialog" aria-modal="true" aria-label="选择导入平台">
+            <div><h2>选择导入平台</h2><p>将当前小米笔记导入到目标云服务</p></div>
+            <div className="picker-options">
+              <button className="button secondary" disabled={!vivoLogin || importing} onClick={() => {
+                setImporting(true); setImportResult(null);
+                void Promise.resolve(api.confirmMigration()).then(() => api.startImport()).then((result) => {
+                  setImportResult(`导入完成：新增 ${result.created} 条，跳过 ${result.skipped} 条`);
+                }).catch(() => setImportResult('导入失败，请检查 vivo 登录状态')).finally(() => setImporting(false));
+              }}>{importing ? '正在导入' : 'vivo 原子笔记'}</button>
+              <button className="button secondary" disabled>小米云笔记（暂未支持）</button>
+            </div>
+            {importResult && <p className="picker-result">{importResult}</p>}
+            <div className="confirm-actions"><button className="button secondary" onClick={() => setImportPickerOpen(false)}>关闭</button></div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }

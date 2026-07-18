@@ -67,7 +67,7 @@ describe('导出笔记预览', () => {
         base64: 'AA=='
       })),
       confirmMigration: vi.fn(),
-      startImport: vi.fn(),
+      startImport: vi.fn(async () => ({ created: 1, skipped: 0, failed: 0, manualReview: 0, cancelled: false })),
       cancelMigration: vi.fn()
     };
     render(<App api={api} />);
@@ -85,6 +85,17 @@ describe('导出笔记预览', () => {
     expect(await screen.findByAltText('b.png')).toBeVisible();
     expect(screen.getByText('其他附件')).toBeVisible();
     expect(screen.getByText('voice.mp3')).toBeVisible();
+    expect(screen.queryByText('需处理')).toBeNull();
+    expect(screen.queryByText('包含需核对内容')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: '导入' }));
+    expect(await screen.findByRole('dialog', { name: '选择导入平台' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'vivo 原子笔记' })).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: 'vivo 原子笔记' }));
+    await waitFor(() => {
+      expect(api.confirmMigration).toHaveBeenCalledTimes(1);
+      expect(api.startImport).toHaveBeenCalledTimes(1);
+    });
 
     fireEvent.change(screen.getByRole('searchbox', { name: '搜索导出笔记' }), {
       target: { value: '项目' }
