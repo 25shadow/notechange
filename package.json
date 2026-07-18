@@ -12,6 +12,7 @@
     "release:win": "node license-server/release.mjs win",
     "license-server": "node license-server/start-admin.mjs",
     "admin:start": "node license-server/start-admin.mjs",
+    "license:public-key": "node license-server/print-public-key.mjs",
     "license:keys": "node license-server/generate-keys.mjs",
     "setup:license": "node license-server/setup.mjs",
     "test": "vitest run --environment jsdom",

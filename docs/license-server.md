@@ -34,11 +34,23 @@ npm run admin:start
 
 ## 自动构建桌面应用
 
+构建包必须内置与已部署授权服务对应的公钥。不要复制服务器私钥。
+
+在部署服务器导出公钥文件：
+
+```sh
+cd /www/wwwroot/node/notechange
+npm run license:public-key > notechange-license-public.pem
+```
+
+将 `notechange-license-public.pem` 放到打包电脑。macOS 包应在 macOS 上构建，Windows 包建议在 Windows 上构建：
+
 ```sh
 export NOTECHANGE_LICENSE_SERVER_URL='https://你的域名'
 export NOTECHANGE_UPDATE_URL='https://你的域名'
+export NOTECHANGE_LICENSE_PUBLIC_KEY="$(cat notechange-license-public.pem)"
 npm run release:mac
 npm run release:win
 ```
 
-发布脚本自动嵌入公钥，不需要手工复制 PEM。首次激活将许可证绑定到当前应用安装 ID；授权服务不会接收笔记、附件、Cookie 或账号信息。
+构建产物在 `release/` 目录。上传生成的安装包到后台“版本发布”即可发布更新。首次激活将许可证绑定到当前应用安装 ID；授权服务不会接收笔记、附件、Cookie 或账号信息。
