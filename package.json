@@ -24,6 +24,7 @@
   "build": {
     "appId": "com.notechange.app",
     "productName": "NoteChange",
+    "icon": "resources/icon",
     "files": ["out/**", "package.json"],
     "mac": { "target": ["dmg", "zip"] },
     "win": { "target": ["nsis"] }
