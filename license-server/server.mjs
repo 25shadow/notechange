@@ -5,7 +5,7 @@ import { createReadStream } from 'node:fs';
 import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import { ensureLicenseConfiguration } from './key-store.mjs';
+import { ensureLicenseConfiguration, readPublicKey } from './key-store.mjs';
 import { createAdminSession, hasAdminPassword, hasAdminSession, setAdminPassword, verifyAdminPassword } from './admin-auth.mjs';
 import { readArtifact, storeArtifact } from './artifact-store.mjs';
 import { renderAdminConsole } from './admin-console.mjs';
@@ -93,6 +93,7 @@ async function deactivate(request, response) {
 
 async function admin(request, response, url) {
   if (!hasAdminSession(request.headers.cookie)) return json(response, 401, { error: 'ADMIN_UNAUTHORIZED' });
+  if (request.method === 'GET' && url.pathname === '/v1/admin/build-public-key') return downloadBuildPublicKey(response);
   if (request.method === 'GET' && url.pathname === '/v1/admin/system-status') return json(response, 200, await systemStatus());
   if (request.method === 'POST' && url.pathname === '/v1/admin/artifacts') return uploadArtifact(request, response);
   if (request.method === 'GET' && url.pathname === '/v1/admin/source-update') return json(response, 200, sourceUpdate);
@@ -133,6 +134,16 @@ async function admin(request, response, url) {
     await saveDatabase(); return json(response, 200, { code: publicRecord(record) });
   }
   return json(response, 404, { error: 'NOT_FOUND' });
+}
+
+async function downloadBuildPublicKey(response) {
+  const publicKey = await readPublicKey(dataDir);
+  response.writeHead(200, {
+    'content-type': 'application/x-pem-file; charset=utf-8',
+    'content-disposition': 'attachment; filename="notechange-license-public.pem"',
+    'cache-control': 'no-store'
+  });
+  response.end(publicKey);
 }
 
 async function uploadArtifact(request, response) {
