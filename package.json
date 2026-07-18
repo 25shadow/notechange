@@ -6,14 +6,26 @@
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
+    "dist:mac": "npm run build && electron-builder --mac --publish never",
+    "dist:win": "npm run build && electron-builder --win --publish never",
+    "license-server": "node license-server/server.mjs",
+    "license:keys": "node license-server/generate-keys.mjs",
     "test": "vitest run --environment jsdom",
     "typecheck": "tsc --noEmit"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
+  "build": {
+    "appId": "com.notechange.app",
+    "productName": "NoteChange",
+    "files": ["out/**", "package.json"],
+    "mac": { "target": ["dmg", "zip"] },
+    "win": { "target": ["nsis"] }
+  },
   "dependencies": {
     "dompurify": "^3.4.12",
+    "electron-updater": "^6.8.9",
     "fingerprint-generator": "^2.1.82",
     "fingerprint-injector": "^2.1.82",
     "jsdom": "^29.1.1",
@@ -32,6 +44,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.2.0",
     "electron": "^43.1.0",
+    "electron-builder": "^26.15.3",
     "electron-vite": "^5.0.0",
     "eslint": "^10.7.0",
     "prettier": "^3.9.5",

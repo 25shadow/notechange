@@ -1,6 +1,7 @@
 // @vitest-environment node
 
 import { createServer, type Server } from 'node:http';
+import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -55,6 +56,17 @@ describe.skipIf(process.env.CODEX_SANDBOX === 'seatbelt')('页面契约执行器
                   });
                   return response.json();
                 }
+              }
+            },
+            iR4f: {
+              async post(path, data) {
+                if (path !== '/file/v2/user/request_upload_file' || !data.data) throw new Error('UPLOAD_REQUEST_INVALID');
+                return { fileId: 'synthetic-uploaded-image', digest: 'd'.repeat(64), mimeType: 'image/png' };
+              }
+            },
+            oq9Y: {
+              async f(file) {
+                return { total: file.size, sha1: 'synthetic-sha1', hashList: [{ blob: file.slice(0) }] };
               }
             }
           };
@@ -156,6 +168,30 @@ describe.skipIf(process.env.CODEX_SANDBOX === 'seatbelt')('页面契约执行器
     });
 
     expect(Buffer.from(bytes)).toEqual(imageSource);
+  }, 15_000);
+
+  it('调用小米官方页面模块上传图片并返回资源标识', async () => {
+    const page = await sessions.open('xiaomi-upload-executor', origin);
+    const executor = new XiaomiPageExecutor(page);
+    const operation: OperationContract = {
+      name: 'uploadImage',
+      method: 'POST',
+      path: '/file/v2/user/request_upload_file',
+      verification: 'source-verified'
+    };
+
+    await expect(executor.call(operation, {
+      attachment: {
+        sourceId: 'fixture',
+        filename: 'fixture.png',
+        mimeType: 'image/png',
+        localPath: join(process.cwd(), '.tmp-notechange-contract-fixture.png')
+      }
+    })).resolves.toEqual({
+      fileId: 'synthetic-uploaded-image',
+      digest: 'd'.repeat(64),
+      mimeType: 'image/png'
+    });
   }, 15_000);
 
   it('只在页面上下文中生成 vivo 加密外层', async () => {

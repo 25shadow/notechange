@@ -5,15 +5,39 @@ export type RendererLoginState = {
   accountLabel: string | null;
 };
 
+export type LicenseStatus = {
+  state: 'active' | 'inactive' | 'unconfigured';
+  licenseId: string | null;
+  message: string;
+};
+
+export type UpdateStatus = {
+  state: 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'latest' | 'unavailable' | 'error';
+  version: string | null;
+  progress: number | null;
+  message: string;
+};
+
 export type ScanSummary = {
   noteCount: number;
   attachmentCount: number;
   warningCount: number;
 };
 
+export type ExportProgress = {
+  source: CloudProvider;
+  total: number;
+  completed: number;
+  stage: 'listing' | 'exporting' | 'completed' | 'failed';
+  current: { sourceId: string; title: string } | null;
+  errorCode?: string;
+  occurredAt: string;
+};
+
 export type LocalExportSummary = ScanSummary & {
   batchId: string;
   exportedAt: string;
+  source?: CloudProvider;
 };
 
 export type ExportPreviewFilter = 'all' | 'warnings' | 'attachments';
@@ -120,8 +144,8 @@ export type ImportHistoryTask = {
   schemaVersion: 1;
   taskId: string;
   batchId: string;
-  source: 'xiaomi';
-  target: 'vivo';
+  source: CloudProvider;
+  target: CloudProvider;
   status: ImportTaskStatus;
   startedAt: string;
   completedAt: string | null;
@@ -131,10 +155,18 @@ export type ImportHistoryTask = {
 };
 
 export interface NoteChangeApi {
+  getUpdateStatus?(): Promise<UpdateStatus>;
+  checkForUpdates?(): Promise<UpdateStatus>;
+  downloadUpdate?(): Promise<UpdateStatus>;
+  installUpdate?(): Promise<void>;
+  getLicenseStatus?(): Promise<LicenseStatus>;
+  activateLicense?(code: string): Promise<LicenseStatus>;
+  deactivateLicense?(): Promise<LicenseStatus>;
   getLoginState(provider: CloudProvider): Promise<RendererLoginState>;
   startLogin(provider: CloudProvider): Promise<RendererLoginState>;
   logout?(provider: CloudProvider): Promise<void>;
   scanXiaomi(): Promise<ScanSummary>;
+  scanVivo?(): Promise<ScanSummary>;
   getLatestExportSummary(): Promise<LocalExportSummary | null>;
   listExports(): Promise<LocalExportSummary[]>;
   selectExport(batchId: string): Promise<LocalExportSummary>;
@@ -149,13 +181,22 @@ export interface NoteChangeApi {
   listImportHistory?(): Promise<ImportHistoryTask[]>;
   getImportHistory?(taskId: string): Promise<ImportHistoryTask | null>;
   onImportProgress?(listener: (progress: ImportProgress) => void): () => void;
+  onExportProgress?(listener: (progress: ExportProgress) => void): () => void;
 }
 
 export const ipcChannels = {
+  getUpdateStatus: 'notechange:get-update-status',
+  checkForUpdates: 'notechange:check-for-updates',
+  downloadUpdate: 'notechange:download-update',
+  installUpdate: 'notechange:install-update',
+  getLicenseStatus: 'notechange:get-license-status',
+  activateLicense: 'notechange:activate-license',
+  deactivateLicense: 'notechange:deactivate-license',
   getLoginState: 'notechange:get-login-state',
   startLogin: 'notechange:start-login',
   logout: 'notechange:logout',
   scanXiaomi: 'notechange:scan-xiaomi',
+  scanVivo: 'notechange:scan-vivo',
   getLatestExportSummary: 'notechange:get-latest-export-summary',
   listExports: 'notechange:list-exports',
   selectExport: 'notechange:select-export',
@@ -170,4 +211,5 @@ export const ipcChannels = {
   listImportHistory: 'notechange:list-import-history',
   getImportHistory: 'notechange:get-import-history',
   importProgress: 'notechange:import-progress'
+  , exportProgress: 'notechange:export-progress'
 } as const;

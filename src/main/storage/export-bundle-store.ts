@@ -1,4 +1,5 @@
 import type { ExportBundle } from '../migration/orchestrator';
+import type { ProviderId } from '../../shared/domain';
 
 export type StoredExportBundle = {
   batchId: string;
@@ -6,11 +7,12 @@ export type StoredExportBundle = {
   noteCount: number;
   attachmentCount: number;
   warningCount: number;
+  source?: ProviderId;
   bundle: ExportBundle;
 };
 
 export interface ExportBundleStore {
-  save(bundle: ExportBundle): Promise<StoredExportBundle>;
+  save(bundle: ExportBundle, source?: ProviderId): Promise<StoredExportBundle>;
   list(): Promise<StoredExportBundle[]>;
   load(batchId: string): Promise<StoredExportBundle | null>;
   loadLatest(): Promise<StoredExportBundle | null>;

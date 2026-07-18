@@ -12,6 +12,8 @@ import { FileExportBundleStore } from './storage/file-export-bundle-store';
 import { exportRoot } from './storage/export-root';
 import { FileImportHistoryStore } from './storage/import-history-store';
 import { importHistoryRoot } from './storage/import-history-root';
+import { LicenseManager } from './license/license-manager';
+import { UpdateManager } from './update/update-manager';
 
 let migrationRuntime: MigrationRuntime | null = null;
 
@@ -36,6 +38,7 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  const licenseManager = new LicenseManager(app.getPath('userData'));
   migrationRuntime = new MigrationRuntime({
     sessionManager: new SessionManager(
       { headless: false },
@@ -46,7 +49,7 @@ app.whenReady().then(() => {
     exports: new FileExportBundleStore(exportRoot(app.getPath('userData'))),
     importHistory: new FileImportHistoryStore(importHistoryRoot(app.getPath('userData')))
   });
-  registerMigrationIpc(ipcMain, migrationRuntime);
+  registerMigrationIpc(ipcMain, migrationRuntime, licenseManager, new UpdateManager());
   createWindow();
 
   app.on('activate', () => {

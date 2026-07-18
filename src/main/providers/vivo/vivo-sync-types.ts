@@ -30,5 +30,23 @@ export type VivoCreateSyncRequest = {
   noteBooks: [];
   notes: VivoSyncNote[];
   tags: [];
-  resources: [];
+  resources: VivoSyncResource[];
+};
+
+export type VivoSyncResource = {
+  guid: string;
+  name: string;
+  mime: string;
+  resourceKey: string;
+  domainAddr: string;
+  resourceSize: number;
+  resType: 1;
+  noteGuid: string;
+  createTime: number;
+  updateTime: number;
+  fileID: string;
+  dirty: 1;
+  deleted: 1;
+  sort: number;
+  category: 3;
 };

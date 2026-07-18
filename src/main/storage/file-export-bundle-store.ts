@@ -23,7 +23,9 @@ const manifestSchema = z.object({
   schemaVersion: z.literal(1),
   batchId: z.string().min(1),
   exportedAt: z.string().datetime(),
-  source: z.literal('xiaomi-cloud-notes'),
+  source: z
+    .union([z.literal('xiaomi'), z.literal('vivo'), z.literal('xiaomi-cloud-notes')])
+    .transform((source) => (source === 'xiaomi-cloud-notes' ? 'xiaomi' : source)),
   noteCount: z.number().int().nonnegative(),
   attachmentCount: z.number().int().nonnegative(),
   warningCount: z.number().int().nonnegative()
@@ -39,7 +41,7 @@ const latestSchema = z.object({ schemaVersion: z.literal(1), batchId: z.string()
 export class FileExportBundleStore implements ExportBundleStore {
   constructor(private readonly rootDirectory: string) {}
 
-  async save(bundle: ExportBundle): Promise<StoredExportBundle> {
+  async save(bundle: ExportBundle, source: 'xiaomi' | 'vivo' = 'xiaomi'): Promise<StoredExportBundle> {
     await mkdir(this.rootDirectory, { recursive: true, mode: 0o700 });
     const exportedAt = new Date().toISOString();
     const batchId = `${exportedAt.replace(/[:.]/g, '-')}-${randomUUID()}`;
@@ -57,7 +59,7 @@ export class FileExportBundleStore implements ExportBundleStore {
         schemaVersion: 1 as const,
         batchId,
         exportedAt,
-        source: 'xiaomi-cloud-notes' as const,
+        source,
         noteCount: notes.length,
         attachmentCount: bundle.attachmentCount,
         warningCount: bundle.warningCount

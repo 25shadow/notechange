@@ -19,6 +19,32 @@ class FakeExecutor implements VivoContractExecutor {
     this.calls.push({ operation: operation.name, payload });
     if (operation.name === 'getSyncState') return syncState as T;
     if (operation.name === 'createSync') return createSuccess as T;
+    if (operation.name === 'listNotes') {
+      return {
+        notes: [
+          {
+            guid: 'vivo-note-1',
+            noteBookGuid: '0',
+            title: 'vivo 合成标题',
+            contentDigest: 'vivo 合成正文',
+            createTime: 1720915200000,
+            updateTime: 1720915260000,
+            deleted: 1,
+            encryptType: 0
+          }
+        ],
+        chunkLowTime: 0
+      } as T;
+    }
+    if (operation.name === 'getNote') return '<p>vivo 合成正文</p>' as T;
+    if (operation.name === 'downloadAttachment') return [137, 80, 78, 71] as T;
+    if (operation.name === 'uploadAttachment') {
+      return {
+        metaId: 'synthetic-meta-1',
+        domain: 'https://synthetic-upload.example',
+        fileSize: 3
+      } as T;
+    }
     throw new Error(`UNEXPECTED_OPERATION:${operation.name}`);
   }
 }
@@ -69,6 +95,171 @@ function withUnverifiedCreate(contract: ProviderContract): ProviderContract {
 }
 
 describe('VivoProvider', () => {
+  it('读取并映射已验证的 vivo 笔记列表和正文', async () => {
+    const executor = new FakeExecutor();
+    const provider = new VivoProvider(
+      new VivoApi(executor, parseProviderContract(vivoContractJson))
+    );
+
+    const page = await provider.listNotes();
+    const note = await provider.getNote('vivo-note-1');
+
+    expect(executor.calls[0]).toMatchObject({
+      operation: 'listNotes',
+      payload: { maxEntries: 1000, syncProtocolVersion: 200 }
+    });
+    expect(executor.calls[1]).toEqual({ operation: 'getNote', payload: { guid: 'vivo-note-1' } });
+    expect(page).toEqual({
+      items: [{ sourceId: 'vivo-note-1', folderSourceId: null }],
+      nextCursor: null
+    });
+    expect(note).toMatchObject({
+      sourceId: 'vivo-note-1',
+      title: 'vivo 合成标题',
+      html: '<p>vivo 合成正文</p>',
+      plainText: 'vivo 合成正文',
+      createdAt: '2024-07-14T00:00:00.000Z',
+      modifiedAt: '2024-07-14T00:01:00.000Z'
+    });
+  });
+
+  it('兼容官网列表的 data 信封和数字型笔记字段', async () => {
+    const contract = parseProviderContract(vivoContractJson);
+    const provider = new VivoProvider(
+      new VivoApi(
+        {
+          async call<T>(operation: { name: string }) {
+            if (operation.name === 'listNotes') {
+              return {
+                data: {
+                  notes: [{
+                    guid: 'vivo-note-number-fields',
+                    noteBookGuid: 0,
+                    title: null,
+                    contentDigest: null,
+                    createTime: '1720915200000',
+                    updateTime: '1720915260000',
+                    deleted: '1',
+                    encryptType: '0',
+                    resources: null
+                  }],
+                  chunkLowTime: '0'
+                }
+              } as T;
+            }
+            if (operation.name === 'getNote') return '正文' as T;
+            throw new Error(`UNEXPECTED_OPERATION:${operation.name}`);
+          }
+        },
+        contract
+      )
+    );
+
+    await expect(provider.listNotes()).resolves.toEqual({
+      items: [{ sourceId: 'vivo-note-number-fields', folderSourceId: null }],
+      nextCursor: null
+    });
+  });
+
+  it('将 vivo 图片资源导出为可下载附件和正文占位', async () => {
+    const executor = new FakeExecutor();
+    const provider = new VivoProvider(
+      new VivoApi(executor, parseProviderContract(vivoContractJson))
+    );
+    await provider.listNotes();
+    const listedCall = executor.calls.at(-1);
+    if (!listedCall || listedCall.operation !== 'listNotes') throw new Error('LIST_CALL_MISSING');
+    (listedCall.payload as never);
+    const originalCall = executor.call.bind(executor);
+    let downloadPayload: unknown;
+    executor.call = async <T>(operation: { name: string }, payload: unknown): Promise<T> => {
+      if (operation.name === 'listNotes') {
+        return {
+          notes: [{
+            guid: 'vivo-resource-note',
+            title: '带图片',
+            contentDigest: '',
+            noteBookGuid: '0',
+            createTime: 1,
+            updateTime: 1,
+            deleted: 1,
+            resources: [{
+              guid: 'vivo-image-1',
+              resourceKey: 'vivo-meta-1',
+              fileID: 'vivo-meta-1',
+              domainAddr: 'https://files.vivo.example',
+              name: 'image.png',
+              mime: 'png',
+              category: 3
+            }]
+          }]
+        } as T;
+      }
+      if (operation.name === 'getNote') return '<p>正文</p><vnote-image guid="vivo-image-1"></vnote-image>' as T;
+      if (operation.name === 'downloadAttachment') {
+        downloadPayload = payload;
+        return [137, 80, 78, 71] as T;
+      }
+      return originalCall(operation, payload);
+    };
+
+    await provider.listNotes();
+    const note = await provider.getNote('vivo-resource-note');
+    const downloaded = await provider.downloadAttachment(note.attachments[0]!);
+
+    expect(note.html).toContain('https://notechange.invalid/attachment/vivo-image-1');
+    expect(note.attachments[0]).toMatchObject({
+      sourceId: 'vivo-image-1',
+      filename: 'image.png',
+      mimeType: 'image/png'
+    });
+    expect(downloaded).toMatchObject({ localPath: expect.any(String), sha256: expect.any(String) });
+    expect(downloadPayload).toMatchObject({ sourceId: 'vivo-image-1' });
+    await provider.dispose();
+  });
+
+  it('兼容官方同步层嵌套 result/data 的列表响应', async () => {
+    const provider = new VivoProvider(
+      new VivoApi(
+        {
+          async call<T>(operation: { name: string }) {
+            if (operation.name === 'listNotes') {
+              return { result: { data: { notes: [{ guid: 101, deleted: 1 }] } } } as T;
+            }
+            throw new Error(`UNEXPECTED_OPERATION:${operation.name}`);
+          }
+        },
+        parseProviderContract(vivoContractJson)
+      )
+    );
+
+    await expect(provider.listNotes()).resolves.toEqual({
+      items: [{ sourceId: '101', folderSourceId: null }],
+      nextCursor: null
+    });
+  });
+
+  it('不把 vivo 的 chunkLowTime 当作分页游标', async () => {
+    const provider = new VivoProvider(
+      new VivoApi(
+        {
+          async call<T>(operation: { name: string }) {
+            if (operation.name === 'listNotes') {
+              return { notes: [{ guid: 'only-once', deleted: 1 }], chunkLowTime: 123 } as T;
+            }
+            throw new Error(`UNEXPECTED_OPERATION:${operation.name}`);
+          }
+        },
+        parseProviderContract(vivoContractJson)
+      )
+    );
+
+    await expect(provider.listNotes()).resolves.toEqual({
+      items: [{ sourceId: 'only-once', folderSourceId: null }],
+      nextCursor: null
+    });
+  });
+
   it('默认拒绝尚未网络验证的 createSync', async () => {
     const contract = withUnverifiedCreate(parseProviderContract(vivoContractJson));
     const provider = new VivoProvider(new VivoApi(new FakeExecutor(), contract));
@@ -114,7 +305,7 @@ describe('VivoProvider', () => {
     });
   });
 
-  it('creates a vivo note when source attachments are present', async () => {
+  it('上传图片并将资源引用写入 vivo 同步笔记', async () => {
     const executor = new FakeExecutor();
     const contract = withVerifiedCreate(parseProviderContract(vivoContractJson));
     const provider = new VivoProvider(new VivoApi(executor, contract));
@@ -122,11 +313,28 @@ describe('VivoProvider', () => {
     await expect(
       provider.upsertNote({ ...canonicalNote, attachments: [fixtureAttachment()] }, '0')
     ).resolves.toMatchObject({ targetId: expect.any(String) });
-    expect(executor.calls).toHaveLength(2);
-    expect(executor.calls.map(({ operation }) => operation)).toEqual(['getSyncState', 'createSync']);
-    expect(executor.calls[1]).toMatchObject({
+    expect(executor.calls.map(({ operation }) => operation)).toEqual([
+      'getSyncState',
+      'uploadAttachment',
+      'createSync'
+    ]);
+    expect(executor.calls[2]).toMatchObject({
       operation: 'createSync',
-      payload: { resources: [] }
+      payload: {
+        resources: [
+          expect.objectContaining({
+            resourceKey: 'synthetic-meta-1',
+            fileID: 'synthetic-meta-1',
+            mime: 'png',
+            category: 3
+          })
+        ],
+        notes: [
+          expect.objectContaining({
+            content: expect.stringContaining('vnote-image')
+          })
+        ]
+      }
     });
   });
 });

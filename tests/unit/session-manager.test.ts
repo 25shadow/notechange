@@ -315,6 +315,26 @@ describe('SessionManager headless transition', () => {
     await manager.disposeAll();
   });
 
+  it('并发持久化同一厂商会话时不会竞争同一个临时文件', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'notechange-session-test-'));
+    directories.push(root);
+    const manager = new SessionManager(
+      { headless: false },
+      root,
+      { launchPersistentContext: vi.fn(async () => fakeContext(fakePage())) },
+      fakeFingerprintStore(),
+      fakeFingerprintInjector()
+    );
+
+    await manager.open('vivo', 'https://pc.vivo.com.cn/suite?origin=cloudWeb#/note', 'headless');
+
+    await expect(
+      Promise.all(Array.from({ length: 8 }, () => manager.persist('vivo')))
+    ).resolves.toHaveLength(8);
+    await expect(stat(join(root, 'vivo', 'notechange-session.json'))).resolves.toBeDefined();
+    await manager.disposeAll();
+  });
+
   it('忽略 Chrome channel，始终使用应用内置 Chromium', async () => {
     const root = await mkdtemp(join(tmpdir(), 'notechange-session-test-'));
     directories.push(root);

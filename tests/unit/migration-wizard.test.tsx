@@ -95,7 +95,7 @@ describe('小米到 vivo 迁移工作区', () => {
     await waitFor(() => expect(screen.getAllByText('已登录')).toHaveLength(1));
     expect(screen.getByRole('button', { name: '导出笔记' })).toBeEnabled();
     fireEvent.click(screen.getByRole('button', { name: '导出笔记' }));
-    expect(screen.getByRole('button', { name: /vivo 原子笔记（暂未支持）/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'vivo 原子笔记' })).toBeDisabled();
   });
 
   it('展示历史批次并在确认后只删除所选批次', async () => {

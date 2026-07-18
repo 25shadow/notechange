@@ -1,4 +1,5 @@
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -231,8 +232,9 @@ export class SessionManager {
     userDataDirectory: string,
     cookies: BrowserCookies
   ): Promise<void> {
+    await mkdir(userDataDirectory, { recursive: true, mode: 0o700 });
     const sessionFile = join(userDataDirectory, sessionFileName);
-    const temporaryFile = `${sessionFile}.${process.pid}.tmp`;
+    const temporaryFile = `${sessionFile}.${process.pid}.${randomUUID()}.tmp`;
     const stored: StoredSession = { version: 1, cookies };
     await writeFile(temporaryFile, JSON.stringify(stored), {
       encoding: 'utf8',

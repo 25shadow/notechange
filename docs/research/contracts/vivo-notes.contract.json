@@ -24,6 +24,8 @@
     { "name": "listNotes", "method": "POST", "path": "/note/getAllNote/v2", "wireBodyKeys": ["jvq_param"], "verification": "network-verified" },
     { "name": "listNotebooks", "method": "POST", "path": "/noteBook/getList", "wireBodyKeys": ["maxEntries"], "verification": "network-verified" },
     { "name": "getNote", "method": "POST", "path": "/note/getContent/v2", "wireBodyKeys": ["jvq_param"], "verification": "network-verified" },
+    { "name": "uploadAttachment", "method": "POST", "path": "/api/suite/web/meta/preUpload.do", "bodyKeys": ["name", "fileSize", "checkSum", "metaType", "mimeType"], "verification": "source-verified" },
+    { "name": "downloadAttachment", "method": "GET", "path": "/api/file/webdisk/download.do", "verification": "source-verified" },
     { "name": "listHistory", "method": "POST", "path": "/history/note/list/v2", "wireBodyKeys": ["jvq_param"], "verification": "network-verified" },
     { "name": "getNoteWithItems", "method": "POST", "path": "/note/getIncludeItem/v2", "verification": "source-verified" },
     { "name": "updateNote", "method": "POST", "path": "/note/update/v2", "verification": "source-verified" },

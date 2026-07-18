@@ -170,7 +170,7 @@ describe('MigrationOrchestrator', () => {
     expect(snapshots.map((snapshot) => snapshot.current?.outcome)).toEqual(['created', 'failed']);
   });
 
-  it('records every attachment omission after creating a note', async () => {
+  it('does not mark successfully handled attachments for manual review', async () => {
     const attachedNote = { ...note('note-1'), attachments: [attachment()] };
     const source = new MemorySource([attachedNote]);
     const target = new MemoryTarget();
@@ -188,15 +188,13 @@ describe('MigrationOrchestrator', () => {
     });
 
     expect(observerCompleted).toBe(true);
-    expect(report).toMatchObject({ created: 1, manualReview: 1 });
+    expect(report).toMatchObject({ created: 1, manualReview: 0 });
     expect(checkpoints.values.get('note-1')).toMatchObject({ status: 'created' });
     expect(progress.at(-1)).toMatchObject({
       created: 1,
-      manualReview: 1,
+      manualReview: 0,
       current: {
-        outcome: 'manual-review',
-        errorCode: 'VIVO_ATTACHMENT_UPLOAD_UNVERIFIED',
-        attachment: { filename: 'fixture.png', mimeType: 'image/png' }
+        outcome: 'created'
       }
     });
   });

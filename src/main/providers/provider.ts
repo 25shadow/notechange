@@ -20,6 +20,7 @@ export type SourceAttachment = {
   sourceId: string;
   mimeType: string;
   filename: string;
+  providerMetadata?: Record<string, string>;
 };
 
 export type DownloadedAttachment = SourceAttachment & {

@@ -25,16 +25,21 @@ export function ImportHistoryDialog({ task, onClose }: ImportHistoryDialogProps)
           </section>
           <section className="history-block" aria-label="失败与人工核对"><h3><AlertTriangle size={16} />失败与人工核对</h3>
             {task.failures.length ? <table className="history-failure-table"><thead><tr><th>笔记</th><th>结果</th><th>原因</th></tr></thead><tbody>{task.failures.map((failure) => {
-              const attachment = failure.errorCode === 'VIVO_ATTACHMENT_UPLOAD_UNVERIFIED'
+              const attachment = isAttachmentUploadUnverified(failure.errorCode)
                 ? failure.attachment
                 : undefined;
-              return <tr key={`${failure.sourceId}-${failure.occurredAt}`} className={attachment ? 'history-attachment-omission' : undefined}><td>{failure.title}{attachment && <small>附件未迁移：{attachment.filename}</small>}</td><td>{failure.outcome === 'manual-review' ? '人工核对' : '失败'}</td><td>{attachment ? 'vivo 网页端附件上传尚未验证' : failure.message}<small>{failure.errorCode}</small></td></tr>;
+              return <tr key={`${failure.sourceId}-${failure.occurredAt}`} className={attachment ? 'history-attachment-omission' : undefined}><td>{failure.title}{attachment && <small>附件未迁移：{attachment.filename}</small>}</td><td>{failure.outcome === 'manual-review' ? '人工核对' : '失败'}</td><td>{attachment ? `${failure.errorCode.startsWith('VIVO_') ? 'vivo' : '小米'} 网页端附件上传尚未验证` : failure.message}<small>{failure.errorCode}</small></td></tr>;
             })}</tbody></table> : <p className="history-empty">本次导入没有失败或待核对记录。</p>}
           </section>
         </div>
       </section>
     </div>
   );
+}
+
+function isAttachmentUploadUnverified(errorCode: string): boolean {
+  return errorCode === 'VIVO_ATTACHMENT_UPLOAD_UNVERIFIED' ||
+    errorCode === 'XIAOMI_ATTACHMENT_UPLOAD_UNVERIFIED';
 }
 
 function statusLabel(status: ImportHistoryTask['status']): string {

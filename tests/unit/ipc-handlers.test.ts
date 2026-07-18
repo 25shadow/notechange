@@ -46,7 +46,9 @@ describe('registerMigrationIpc', () => {
     registerMigrationIpc(ipcMain, runtime);
 
     expect([...handlers.keys()].sort()).toEqual(
-      Object.values(ipcChannels).filter((channel) => channel !== ipcChannels.importProgress).sort()
+      Object.values(ipcChannels)
+        .filter((channel) => channel !== ipcChannels.importProgress && channel !== ipcChannels.exportProgress)
+        .sort()
     );
     await expect(
       handlers.get(ipcChannels.startLogin)?.({}, 'unknown')

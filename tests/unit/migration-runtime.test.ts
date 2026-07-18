@@ -86,7 +86,7 @@ class MemoryExports implements ExportBundleStore {
   values: StoredExportBundle[] = [];
   saves = 0;
 
-  async save(bundle: ExportBundle): Promise<StoredExportBundle> {
+  async save(bundle: ExportBundle, source: 'xiaomi' | 'vivo' = 'xiaomi'): Promise<StoredExportBundle> {
     this.saves += 1;
     const value = {
       batchId: `batch-${this.saves}`,
@@ -94,6 +94,7 @@ class MemoryExports implements ExportBundleStore {
       noteCount: bundle.notes.length,
       attachmentCount: bundle.attachmentCount,
       warningCount: bundle.warningCount,
+      source,
       bundle
     };
     this.values.unshift(value);
@@ -131,6 +132,36 @@ class MemoryImportHistory implements ImportHistoryStore {
 }
 
 describe('MigrationRuntime', () => {
+  it('将 vivo 导出批次导入小米而非写回 vivo', async () => {
+    const page = {} as Page;
+    const xiaomi = new FakeProvider('xiaomi');
+    const vivo = new FakeProvider('vivo');
+    vivo.listNotes = vi.fn(async () => ({
+      items: [{ sourceId: canonicalNote.sourceId, folderSourceId: null }],
+      nextCursor: null
+    }));
+    const runtime = new MigrationRuntime({
+      sessionManager: {
+        getPage: vi.fn(() => page),
+        open: vi.fn(async () => page),
+        persist: vi.fn(async () => undefined),
+        switchToHeaded: vi.fn(async () => page),
+        switchToHeadless: vi.fn(async () => page),
+        disposeAll: vi.fn(async () => undefined)
+      },
+      createProvider: (provider) => (provider === 'xiaomi' ? xiaomi : vivo),
+      checkpoints: new MemoryCheckpoints(),
+      exports: new MemoryExports()
+    });
+
+    await runtime.scanVivo();
+    runtime.confirmMigration();
+    await runtime.startImport();
+
+    expect(xiaomi.writes).toEqual(['synthetic-1']);
+    expect(vivo.writes).toEqual([]);
+  });
+
   it('复用登录页，并在确认前只导出不写入 vivo', async () => {
     const page = {} as Page;
     const sessionManager = {
@@ -517,7 +548,7 @@ describe('MigrationRuntime', () => {
     );
   });
 
-  it('将附件未迁移记录为带有安全附件元数据的人工核对项', async () => {
+  it('附件由目标端处理成功时不记录人工核对项', async () => {
     const page = {} as Page;
     const xiaomi = new FakeProvider('xiaomi');
     xiaomi.getNote = vi.fn(async () => ({
@@ -543,16 +574,9 @@ describe('MigrationRuntime', () => {
     await runtime.scanXiaomi();
     runtime.confirmMigration();
 
-    await expect(runtime.startImport()).resolves.toMatchObject({ created: 1, manualReview: 1 });
+    await expect(runtime.startImport()).resolves.toMatchObject({ created: 1, manualReview: 0 });
 
-    expect(history.appendFailure).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.objectContaining({
-        outcome: 'manual-review',
-        errorCode: 'VIVO_ATTACHMENT_UPLOAD_UNVERIFIED',
-        attachment: { filename: 'fixture.png', mimeType: 'image/png' }
-      })
-    );
+    expect(history.appendFailure).not.toHaveBeenCalled();
   });
 
   it('通过同一 profile 的有头会话打开笔记中心', async () => {

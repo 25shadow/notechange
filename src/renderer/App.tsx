@@ -9,6 +9,7 @@ import {
   FolderOpen,
   LoaderCircle,
   LogIn,
+  KeyRound,
   Trash2,
   Upload
 } from 'lucide-react';
@@ -18,8 +19,11 @@ import type {
   NoteChangeApi,
   RendererLoginState,
   ImportHistoryTask,
-  ImportProgress
+  ImportProgress,
+  ExportProgress
 } from '../shared/ipc';
+import type { LicenseStatus } from '../shared/ipc';
+import type { UpdateStatus } from '../shared/ipc';
 import type { LocalExportSummary } from '../shared/ipc';
 import { ExportPreviewDialog } from './ExportPreviewDialog';
 import { ImportHistoryDialog } from './ImportHistoryDialog';
@@ -32,6 +36,7 @@ type AppProps = {
 type LogEntry = { message: string; time: string; kind: 'success' | 'error' | 'info' };
 
 const disconnected: RendererLoginState = { authenticated: false, accountLabel: null };
+const activeLicense: LicenseStatus = { state: 'active', licenseId: null, message: '永久授权已激活' };
 const unavailableApi: RendererMigrationApi = {
   getLoginState: async () => disconnected,
   startLogin: async () => {
@@ -81,9 +86,13 @@ export function App({ api }: AppProps) {
   const [importPickerOpen, setImportPickerOpen] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState<ImportProgress | null>(null);
+  const [exportProgress, setExportProgress] = useState<ExportProgress | null>(null);
   const [importHistory, setImportHistory] = useState<ImportHistoryTask[]>([]);
   const [historyDetail, setHistoryDetail] = useState<ImportHistoryTask | null>(null);
   const [openingNoteCenter, setOpeningNoteCenter] = useState<CloudProvider | null>(null);
+  const [license, setLicense] = useState<LicenseStatus>(activeLicense);
+  const [licenseDialogOpen, setLicenseDialogOpen] = useState(false);
+  const [update, setUpdate] = useState<UpdateStatus>({ state: 'unavailable', version: null, progress: null, message: '当前版本未配置更新服务' });
   const [logs, setLogs] = useState<LogEntry[]>([{ message: '应用已启动', time: formatTime(new Date()), kind: 'info' }]);
 
   const log = (message: string, kind: LogEntry['kind'] = 'info') => setLogs((current) => [{ message, time: formatTime(new Date()), kind }, ...current].slice(0, 6));
@@ -105,6 +114,26 @@ export function App({ api }: AppProps) {
       })
       .catch(() => { if (active) { setError('无法读取登录状态，请重新连接账号。'); log('读取状态失败'); } });
     return () => { active = false; };
+  }, [migrationApi]);
+
+  useEffect(() => { if (migrationApi.getUpdateStatus) void migrationApi.getUpdateStatus().then(setUpdate); }, [migrationApi]);
+
+  useEffect(() => {
+    if (!migrationApi.getLicenseStatus) return;
+    void migrationApi.getLicenseStatus().then((status) => {
+      setLicense(status);
+      if (status.state !== 'active') setLicenseDialogOpen(true);
+    }).catch(() => setLicense({ state: 'inactive', licenseId: null, message: '无法验证授权状态' }));
+  }, [migrationApi]);
+
+  useEffect(() => {
+    const unsubscribe = migrationApi.onExportProgress?.((progress) => {
+      setExportProgress(progress);
+      if (progress.stage === 'listing') log('正在读取笔记列表');
+      if (progress.stage === 'exporting' && progress.current) log(`已导出：${progress.current.title}`, 'success');
+      if (progress.stage === 'failed') log(`导出失败：${progress.errorCode ?? 'UNKNOWN'}`, 'error');
+    });
+    return () => unsubscribe?.();
   }, [migrationApi]);
 
   useEffect(() => {
@@ -138,16 +167,22 @@ export function App({ api }: AppProps) {
     } finally { setLoadingProvider(null); }
   };
 
-  const scan = async () => {
-    setError(null); setScanning(true);
+  const licenseActive = license.state === 'active';
+
+  const scan = async (provider: CloudProvider) => {
+    const providerName = provider === 'xiaomi' ? '小米笔记' : 'vivo 笔记';
+    setError(null); setExportProgress({ source: provider, total: 0, completed: 0, stage: 'listing', current: null, occurredAt: new Date().toISOString() }); setScanning(true);
     try {
-      await migrationApi.scanXiaomi();
+      if (provider === 'xiaomi') await migrationApi.scanXiaomi();
+      else if (migrationApi.scanVivo) await migrationApi.scanVivo();
+      else throw new Error('VIVO_EXPORT_UNAVAILABLE');
       const localExports = await migrationApi.listExports();
       setExports(localExports); setSelectedExport(localExports[0] ?? null);
-      log('小米笔记导出成功', 'success'); setExportPickerOpen(false);
-    } catch {
-      setError('小米笔记导出失败，请检查登录状态后重试。'); log('小米笔记导出失败', 'error');
-    } finally { setScanning(false); }
+      log(`${providerName}导出成功`, 'success'); setExportPickerOpen(false);
+    } catch (cause) {
+      const code = cause instanceof Error ? cause.message : 'UNKNOWN';
+      setError(`${providerName}导出失败：${code}`); log(`${providerName}导出失败：${code}`, 'error');
+    } finally { setScanning(false); setExportProgress(null); }
   };
 
   const openPreview = async (summary: LocalExportSummary) => {
@@ -184,7 +219,8 @@ export function App({ api }: AppProps) {
     finally { setDeleting(false); }
   };
 
-  const xiaomiConnected = login.xiaomi.authenticated;
+  const sourceProvider = selectedExport?.source ?? 'xiaomi';
+  const targetProvider: CloudProvider = sourceProvider === 'xiaomi' ? 'vivo' : 'xiaomi';
   const importToVivo = async () => {
     setError(null);
     setImporting(true);
@@ -201,7 +237,7 @@ export function App({ api }: AppProps) {
       return report;
     } catch (cause) {
       log('导入失败', 'error');
-      setError('导入失败，请检查 vivo 登录状态后重试。');
+      setError(`导入失败，请检查${targetProvider === 'vivo' ? 'vivo 原子笔记' : '小米云笔记'}登录状态后重试。`);
       throw cause;
     } finally { setImporting(false); setImportProgress(null); }
   };
@@ -261,8 +297,8 @@ export function App({ api }: AppProps) {
           <table className="export-table" aria-label="本地导出批次">
             <thead><tr><th>来源</th><th>导出时间</th><th>笔记</th><th>附件</th><th>操作</th></tr></thead>
             <tbody>{exports.map((summary) => <tr key={summary.batchId} className={selectedExport?.batchId === summary.batchId ? 'selected' : ''}>
-              <td data-label="来源">小米云笔记</td><td data-label="导出时间">{formatDate(summary.exportedAt)}</td><td data-label="笔记">{summary.noteCount}</td><td data-label="附件">{summary.attachmentCount}</td>
-              <td data-label="操作"><div className="export-actions"><button className="button compact primary" onClick={() => void openImport(summary)}><Upload size={15} />导入</button><button className="button compact secondary" onClick={() => void openPreview(summary)}><Eye size={15} />查看</button><button className="button compact danger" aria-label={`删除批次 ${summary.batchId}`} onClick={() => setDeleteTarget(summary)}><Trash2 size={15} />删除</button></div></td>
+              <td data-label="来源">{providerName(summary.source ?? 'xiaomi')}</td><td data-label="导出时间">{formatDate(summary.exportedAt)}</td><td data-label="笔记">{summary.noteCount}</td><td data-label="附件">{summary.attachmentCount}</td>
+              <td data-label="操作"><div className="export-actions"><button className="button compact primary" disabled={!licenseActive} onClick={() => void openImport(summary)}><Upload size={15} />导入</button><button className="button compact secondary" onClick={() => void openPreview(summary)}><Eye size={15} />查看</button><button className="button compact danger" aria-label={`删除批次 ${summary.batchId}`} onClick={() => setDeleteTarget(summary)}><Trash2 size={15} />删除</button></div></td>
             </tr>)}</tbody>
           </table>
         </div> : <div className="empty-state"><Download size={22} /><span>尚未生成导出批次</span></div>}
@@ -275,27 +311,55 @@ export function App({ api }: AppProps) {
 
       {previewOpen && selectedExport && <ExportPreviewDialog api={migrationApi} summary={selectedExport} onClose={() => setPreviewOpen(false)} />}
       {deleteTarget && <DeleteExportDialog summary={deleteTarget} deleting={deleting} onCancel={() => !deleting && setDeleteTarget(null)} onConfirm={() => void deleteExport()} />}
-      {exportPickerOpen && <ExportPickerDialog xiaomiConnected={xiaomiConnected} scanning={scanning} onCancel={() => setExportPickerOpen(false)} onExportXiaomi={() => void scan()} />}
-      {importPickerOpen && <ImportPickerDialog vivoConnected={login.vivo.authenticated} importing={importing} onCancel={() => !importing && setImportPickerOpen(false)} onImport={() => void importToVivo()} />}
+      {exportPickerOpen && <ExportPickerDialog xiaomiConnected={login.xiaomi.authenticated} vivoConnected={login.vivo.authenticated} vivoExportAvailable={Boolean(migrationApi.scanVivo)} licenseActive={licenseActive} scanning={scanning} onCancel={() => setExportPickerOpen(false)} onExportXiaomi={() => void scan('xiaomi')} onExportVivo={() => void scan('vivo')} />}
+      {importPickerOpen && <ImportPickerDialog targetProvider={targetProvider} targetConnected={login[targetProvider].authenticated} importing={importing} onCancel={() => !importing && setImportPickerOpen(false)} onImport={() => void importToVivo()} />}
       {importProgress && <ImportProgressDialog progress={importProgress} logs={logs} onCancel={() => void migrationApi.cancelMigration()} />}
+      {exportProgress && <ExportProgressDialog progress={exportProgress} logs={logs} />}
       {historyDetail && <ImportHistoryDialog task={historyDetail} onClose={() => setHistoryDetail(null)} />}
+      <button className="license-status" onClick={() => setLicenseDialogOpen(true)} title="永久授权"><KeyRound size={15} />{license.state === 'active' ? '永久授权已激活' : '激活永久授权'}</button>
+      <button className="update-status" disabled={!migrationApi.checkForUpdates || update.state === 'checking' || update.state === 'downloading'} onClick={() => {
+        if (update.state === 'available') void migrationApi.downloadUpdate?.().then(setUpdate);
+        else if (update.state === 'downloaded') void migrationApi.installUpdate?.();
+        else void migrationApi.checkForUpdates?.().then(setUpdate);
+      }} title={update.message}>{update.state === 'available' ? `下载 ${update.version}` : update.state === 'downloaded' ? '重启并安装更新' : update.state === 'downloading' ? update.message : '检查更新'}</button>
+      {licenseDialogOpen && <LicenseDialog api={migrationApi} status={license} onStatus={setLicense} onClose={() => setLicenseDialogOpen(false)} />}
     </main>
   );
 }
 
-function ExportPickerDialog({ xiaomiConnected, scanning, onCancel, onExportXiaomi }: { xiaomiConnected: boolean; scanning: boolean; onCancel: () => void; onExportXiaomi: () => void }) {
+function ExportPickerDialog({ xiaomiConnected, vivoConnected, vivoExportAvailable, licenseActive, scanning, onCancel, onExportXiaomi, onExportVivo }: { xiaomiConnected: boolean; vivoConnected: boolean; vivoExportAvailable: boolean; licenseActive: boolean; scanning: boolean; onCancel: () => void; onExportXiaomi: () => void; onExportVivo: () => void }) {
   return <div className="confirm-overlay" role="presentation"><section className="confirm-dialog picker-dialog" role="dialog" aria-modal="true" aria-label="选择导出平台">
     <div><h2>选择导出平台</h2><p>选择要保存到本地的云笔记</p></div>
-    <div className="picker-options"><button className="button secondary" disabled={!xiaomiConnected || scanning} onClick={onExportXiaomi}>{scanning ? '正在导出' : '小米云笔记'}</button><button className="button secondary" disabled>vivo 原子笔记（暂未支持）</button></div>
+    <div className="picker-options"><button className="button secondary" disabled={!licenseActive || !xiaomiConnected || scanning} onClick={onExportXiaomi}>{scanning ? '正在导出' : '小米云笔记'}</button><button className="button secondary" disabled={!licenseActive || !vivoConnected || !vivoExportAvailable || scanning} onClick={onExportVivo}>{scanning ? '正在导出' : 'vivo 原子笔记'}</button></div>
     <div className="confirm-actions"><button className="button secondary" onClick={onCancel}>取消</button></div>
   </section></div>;
 }
 
-function ImportPickerDialog({ vivoConnected, importing, onCancel, onImport }: { vivoConnected: boolean; importing: boolean; onCancel: () => void; onImport: () => void }) {
+function LicenseDialog({ api, status, onStatus, onClose }: { api: RendererMigrationApi; status: LicenseStatus; onStatus: (status: LicenseStatus) => void; onClose: () => void }) {
+  const [code, setCode] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const activate = async () => {
+    if (!api.activateLicense) return;
+    setBusy(true); setError(null);
+    try { const next = await api.activateLicense(code); onStatus(next); onClose(); }
+    catch (cause) { setError(cause instanceof Error ? licenseError(cause.message) : '激活失败'); }
+    finally { setBusy(false); }
+  };
+  return <div className="confirm-overlay" role="presentation"><section className="confirm-dialog picker-dialog" role="dialog" aria-modal="true" aria-label="永久授权">
+    <div><h2>永久授权</h2><p>{status.message}</p></div>
+    {status.state === 'active' ? <div className="confirm-actions"><button className="button secondary" disabled={busy} onClick={() => { if (api.deactivateLicense) void api.deactivateLicense().then(onStatus); }}>解绑当前设备</button><button className="button primary" onClick={onClose}>完成</button></div> : <><input className="license-code-input" aria-label="永久激活码" placeholder="NC-XXXX-XXXX-XXXX-XXXX-XXXX" value={code} onChange={(event) => setCode(event.target.value.toUpperCase())} /><p className="picker-result">{error ?? (status.state === 'unconfigured' ? '请先在应用构建配置中设置授权服务地址和公钥。' : '激活码永久有效，仅绑定当前设备。')}</p><div className="confirm-actions"><button className="button secondary" onClick={onClose}>取消</button><button className="button primary" disabled={busy || status.state === 'unconfigured' || !code} onClick={() => void activate()}>{busy ? '正在激活' : '激活'}</button></div></>}
+  </section></div>;
+}
+
+function licenseError(code: string): string { return ({ LICENSE_CODE_INVALID: '激活码格式不正确', LICENSE_REVOKED: '该激活码已被禁用', LICENSE_DEVICE_LIMIT_REACHED: '该激活码已绑定其他设备', LICENSE_SERVICE_UNCONFIGURED: '授权服务尚未配置' } as Record<string, string>)[code] ?? '激活失败，请稍后重试'; }
+
+function ImportPickerDialog({ targetProvider, targetConnected, importing, onCancel, onImport }: { targetProvider: CloudProvider; targetConnected: boolean; importing: boolean; onCancel: () => void; onImport: () => void }) {
+  const targetName = providerName(targetProvider);
   return <div className="confirm-overlay" role="presentation"><section className="confirm-dialog picker-dialog" role="dialog" aria-modal="true" aria-label="选择导入平台">
     <div><h2>选择导入平台</h2><p>将当前批次导入到目标云服务</p></div>
-    <div className="picker-options"><button className="button secondary" disabled={!vivoConnected || importing} onClick={onImport}>{importing ? '正在导入' : '导入到 vivo 原子笔记'}</button><button className="button secondary" disabled>导入到小米云笔记（暂未支持）</button></div>
-    {!vivoConnected && <p className="picker-result">请先登录 vivo 原子笔记</p>}
+    <div className="picker-options"><button className="button secondary" disabled={!targetConnected || importing} onClick={onImport}>{importing ? '正在导入' : `导入到 ${targetName}`}</button></div>
+    {!targetConnected && <p className="picker-result">请先登录 {targetName}</p>}
     <div className="confirm-actions"><button className="button secondary" disabled={importing} onClick={onCancel}>取消</button></div>
   </section></div>;
 }
@@ -346,7 +410,22 @@ function ImportProgressDialog({ progress, logs, onCancel }: { progress: ImportPr
   </section></div>;
 }
 
+function ExportProgressDialog({ progress, logs }: { progress: ExportProgress; logs: LogEntry[] }) {
+  const percentage = progress.total ? Math.min(100, Math.round((progress.completed / progress.total) * 100)) : 0;
+  const title = progress.stage === 'listing' ? '正在读取笔记列表' : progress.stage === 'failed' ? '导出失败' : progress.stage === 'completed' ? '导出完成' : `正在导出：${progress.current?.title ?? '笔记'}`;
+  return <div className="confirm-overlay" role="presentation"><section className="confirm-dialog import-progress-dialog" role="dialog" aria-modal="true" aria-label="正在导出笔记">
+    <div><h2>正在导出笔记</h2><p>{title}</p></div>
+    <div className="progress-stats"><strong>{progress.completed} / {progress.total || '?'}</strong><span>{progress.source === 'vivo' ? 'vivo 原子笔记' : '小米云笔记'}</span></div>
+    <div className="progress-track" role="progressbar" aria-valuemin={0} aria-valuemax={Math.max(progress.total, 1)} aria-valuenow={progress.completed}><span style={{ width: `${percentage}%` }} /></div>
+    <div className="progress-log" aria-label="最近导出日志">{logs.slice(0, 3).map((entry, index) => <span key={`${entry.time}-${index}`}>{entry.message}</span>)}</div>
+  </section></div>;
+}
+
 function Clock3Icon() { return <Clock3 size={22} />; }
+
+function providerName(provider: CloudProvider): string {
+  return provider === 'xiaomi' ? '小米云笔记' : 'vivo 原子笔记';
+}
 
 function historyStatusLabel(status: ImportHistoryTask['status']): string {
   return { running: '正在导入', completed: '已完成', 'completed-with-issues': '完成但有问题', cancelled: '已取消', 'failed-to-start': '未能启动' }[status];

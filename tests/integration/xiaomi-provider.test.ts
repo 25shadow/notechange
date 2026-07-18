@@ -27,6 +27,13 @@ class FakeExecutor implements XiaomiContractExecutor {
       return { code: 0, data: { entry: { id: 'synthetic-target-1' } } } as T;
     }
     if (operation.name === 'downloadImage') return new Uint8Array([1, 2, 3]) as T;
+    if (operation.name === 'uploadImage') {
+      return {
+        fileId: 'xiaomi-uploaded-image-1',
+        digest: 'c'.repeat(64),
+        mimeType: 'image/png'
+      } as T;
+    }
     throw new Error(`UNEXPECTED_OPERATION:${operation.name}`);
   }
 }
@@ -38,6 +45,70 @@ function createProvider() {
 }
 
 describe('XiaomiProvider', () => {
+  it('创建笔记时将统一标题写入小米 extraInfo', async () => {
+    const { executor, provider } = createProvider();
+
+    await provider.upsertNote({
+      sourceId: 'vivo-note-1',
+      folderSourceId: null,
+      title: '来自 vivo 的标题',
+      html: '<p>来自 vivo 的正文</p>',
+      plainText: '来自 vivo 的正文',
+      attachments: [],
+      createdAt: null,
+      modifiedAt: null,
+      contentHash: 'a'.repeat(64),
+      warnings: []
+    }, null);
+
+    const entry = JSON.parse(executor.calls[0]?.request.body?.entry ?? '{}') as {
+      extraInfo?: string;
+    };
+    expect(JSON.parse(entry.extraInfo ?? '{}')).toMatchObject({
+      title: '来自 vivo 的标题',
+      note_content_type: 'common'
+    });
+  });
+
+  it('上传附件后写入小米图片引用和 setting.data', async () => {
+    const { executor, provider } = createProvider();
+
+    await provider.upsertNote({
+      sourceId: 'vivo-note-with-image',
+      folderSourceId: null,
+      title: '带图片的 vivo 笔记',
+      html: '<p>图片前</p><img src="https://notechange.invalid/attachment/vivo-image-1"><p>图片后</p>',
+      plainText: '图片前图片后',
+      attachments: [{
+        sourceId: 'vivo-image-1',
+        mimeType: 'image/png',
+        filename: 'vivo-image.png',
+        sha256: 'b'.repeat(64),
+        localPath: '/synthetic/vivo-image.png'
+      }],
+      createdAt: null,
+      modifiedAt: null,
+      contentHash: 'a'.repeat(64),
+      warnings: []
+    }, null);
+
+    expect(executor.calls.map(({ operation }) => operation.name)).toEqual([
+      'uploadImage',
+      'createNote'
+    ]);
+    const entry = JSON.parse(executor.calls[1]?.request.body?.entry ?? '{}') as {
+      content?: string;
+      setting?: { data?: Array<{ fileId: string; digest: string; mimeType: string }> };
+    };
+    expect(entry.content).toContain('custom-img="true"');
+    expect(entry.content).toContain('data-fileid="xiaomi-uploaded-image-1"');
+    expect(entry.setting?.data).toEqual([{
+      fileId: 'xiaomi-uploaded-image-1',
+      digest: 'c'.repeat(64),
+      mimeType: 'image/png'
+    }]);
+  });
+
   it('使用 syncTag 作为唯一分页游标', async () => {
     const { executor, provider } = createProvider();
 

@@ -97,6 +97,16 @@ type XiaomiCreateEntry = {
 
 `jvq_param` 由当前官方前端的模块 `920` 生成。该模块按环境选择配置并暴露为 `window.VNoteServerMaodun`；适配器在已登录页面上下文中调用 `window.VNoteServerMaodun.encrypt(JSON.stringify(payload)).data`。适配器不复制密钥、不在 Node 侧实现加密算法，也不保存密文。
 
+### 图片附件上传链路
+
+官方网页模块 `324`（`FileUpload`）负责上传图片。适配器必须调用该模块，避免读取或持久化网页会话中的 `openId`、STS token 或上传域名凭据。模块执行的顺序为：
+
+1. `POST /api/suite/web/meta/preUpload.do`：传入文件名、大小、校验和、图片元信息，取得 `metaId`、上传域名和分片策略。
+2. 上传原始图片到返回域名的 `/api/file/webdisk/upload.do`（或分片接口），完成后由模块确认上传。
+3. 把返回的 `metaId` 映射为同步资源的 `resourceKey` 和 `fileID`，并将资源与创建笔记请求一起提交。图片正文引用使用 `vnote-image` 的资源 `guid`。
+
+当前代码只允许图像附件走该路径。上传失败会使该条笔记进入失败记录，不会创建一个声称已含附件的半成品笔记。
+
 ### 官方前端源码确认
 
 | 方法 | 业务路径（网络层加 `/note-api`） | 前端调用名 | 用途 |

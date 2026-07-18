@@ -36,6 +36,7 @@ describe('导出笔记预览', () => {
       getLatestExportSummary: vi.fn(async () => ({
         batchId: 'batch-1',
         exportedAt: '2026-07-17T00:00:00.000Z',
+        source: 'vivo' as const,
         noteCount: 318,
         attachmentCount: 19,
         warningCount: 245
@@ -43,6 +44,7 @@ describe('导出笔记预览', () => {
       listExports: vi.fn(async () => [{
         batchId: 'batch-1',
         exportedAt: '2026-07-17T00:00:00.000Z',
+        source: 'vivo' as const,
         noteCount: 318,
         attachmentCount: 19,
         warningCount: 245
@@ -50,6 +52,7 @@ describe('导出笔记预览', () => {
       selectExport: vi.fn(async () => ({
         batchId: 'batch-1',
         exportedAt: '2026-07-17T00:00:00.000Z',
+        source: 'vivo' as const,
         noteCount: 318,
         attachmentCount: 19,
         warningCount: 245
@@ -91,7 +94,7 @@ describe('导出笔记预览', () => {
     render(<App api={api} />);
 
     fireEvent.click(await screen.findByRole('button', { name: '查看' }));
-    expect(await screen.findByRole('dialog', { name: '小米笔记预览' })).toBeVisible();
+    expect(await screen.findByRole('dialog', { name: 'vivo 原子笔记预览' })).toBeVisible();
     expect(await screen.findByText('会议记录')).toBeVisible();
     expect(await screen.findByText(/<img src=x/)).toBeVisible();
     expect(document.querySelector('img[src="x"]')).toBeNull();

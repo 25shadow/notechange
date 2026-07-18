@@ -5,6 +5,11 @@ import { defineConfig, externalizeDepsPlugin } from 'electron-vite';
 
 export default defineConfig({
   main: {
+    define: {
+      __NOTECHANGE_LICENSE_SERVER_URL__: JSON.stringify(process.env.NOTECHANGE_LICENSE_SERVER_URL ?? ''),
+      __NOTECHANGE_LICENSE_PUBLIC_KEY__: JSON.stringify(process.env.NOTECHANGE_LICENSE_PUBLIC_KEY ?? '')
+      , __NOTECHANGE_UPDATE_URL__: JSON.stringify(process.env.NOTECHANGE_UPDATE_URL ?? '')
+    },
     plugins: [externalizeDepsPlugin()]
   },
   preload: {

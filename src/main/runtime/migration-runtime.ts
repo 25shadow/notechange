@@ -10,6 +10,7 @@ import type {
   ExportPreviewDetail,
   ExportPreviewPage,
   ExportPreviewQuery,
+  ExportProgress,
   ImportFailure,
   ImportHistoryTask,
   ImportProgress,
@@ -147,12 +148,18 @@ export class MigrationRuntime {
     await this.options.sessionManager.logout?.(provider);
   }
 
-  async scanXiaomi(): Promise<ScanSummary> {
-    const sourcePage = this.requirePage('xiaomi');
-    const exported = await exportProviderNotes(
-      this.options.createProvider('xiaomi', sourcePage)
-    );
-    this.storedExport = await this.options.exports.save(exported);
+  async scanXiaomi(onProgress?: (progress: ExportProgress) => unknown): Promise<ScanSummary> {
+    return this.scanProvider('xiaomi', onProgress);
+  }
+
+  async scanVivo(onProgress?: (progress: ExportProgress) => unknown): Promise<ScanSummary> {
+    return this.scanProvider('vivo', onProgress);
+  }
+
+  private async scanProvider(source: CloudProvider, onProgress?: (progress: ExportProgress) => unknown): Promise<ScanSummary> {
+    const sourcePage = this.requirePage(source);
+    const exported = await exportProviderNotes(this.options.createProvider(source, sourcePage), (progress) => onProgress?.({ ...progress, source }));
+    this.storedExport = await this.options.exports.save(exported, source);
     this.bundle = this.storedExport.bundle;
     this.orchestrator = null;
     this.confirmed = false;
@@ -260,10 +267,13 @@ export class MigrationRuntime {
   ): Promise<RendererMigrationReport> {
     if (!this.bundle) throw new Error('EXPORT_BUNDLE_MISSING');
     if (!this.confirmed) throw new Error('MIGRATION_NOT_CONFIRMED');
-    const targetPage = this.requirePage('vivo');
+    const stored = await this.ensureStoredExport(true);
+    const source = stored.source ?? 'xiaomi';
+    const target: CloudProvider = source === 'xiaomi' ? 'vivo' : 'xiaomi';
+    const targetPage = this.requirePage(target);
     this.orchestrator = new MigrationOrchestrator(
       null,
-      this.options.createProvider('vivo', targetPage),
+      this.options.createProvider(target, targetPage),
       this.options.checkpoints
     );
     this.orchestrator.confirm();
@@ -283,9 +293,9 @@ export class MigrationRuntime {
     await this.importHistory.create({
       schemaVersion: 1,
       taskId,
-      batchId: (await this.ensureStoredExport(true)).batchId,
-      source: 'xiaomi',
-      target: 'vivo',
+      batchId: stored.batchId,
+      source,
+      target,
       status: 'running',
       startedAt,
       completedAt: null,
@@ -460,6 +470,7 @@ function toLocalSummary(stored: StoredExportBundle): LocalExportSummary {
   return {
     batchId: stored.batchId,
     exportedAt: stored.exportedAt,
+    source: stored.source,
     noteCount: stored.noteCount,
     attachmentCount: stored.attachmentCount,
     warningCount: stored.warningCount

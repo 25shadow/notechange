@@ -1,6 +1,7 @@
 import { assertWriteVerified } from '../../contracts/loader';
 import type { OperationContract, ProviderContract } from '../../contracts/schema';
 import { z } from 'zod';
+import type { SourceAttachment } from '../provider';
 
 const listEntrySchema = z.object({
   id: z.string(),
@@ -34,11 +35,17 @@ const noteDataSchema = z.object({ entry: noteEntrySchema });
 const createdDataSchema = z.object({
   entry: z.object({ id: z.string(), modifyDate: z.number().optional() })
 });
+const uploadedImageSchema = z.object({
+  fileId: z.string().min(1),
+  digest: z.string().min(1),
+  mimeType: z.string().min(1)
+});
 
 export type XiaomiRequest = {
   query?: Record<string, string | number>;
   body?: Record<string, string>;
   pathParameters?: Record<string, string>;
+  attachment?: SourceAttachment & { localPath: string };
 };
 
 export interface XiaomiContractExecutor {
@@ -104,6 +111,11 @@ export class XiaomiApi {
     return this.execute(operation, {
       query: { type: 'note_img', fileid: fileId }
     });
+  }
+
+  async uploadImage(attachment: SourceAttachment & { localPath: string }): Promise<XiaomiAttachmentEntry> {
+    const response = await this.execute<unknown>(this.operation('uploadImage'), { attachment });
+    return this.parseResponse('uploadImage', uploadedImageSchema, response);
   }
 
   async createFolder(entry: string): Promise<{ entry: { id: string } }> {

@@ -1,5 +1,7 @@
 import { ipcChannels, type CloudProvider, type ImportProgress } from '../../shared/ipc';
 import type { MigrationRuntime } from './migration-runtime';
+import type { LicenseManager } from '../license/license-manager';
+import type { UpdateManager } from '../update/update-manager';
 
 type IpcEventLike = { sender: { send(channel: string, ...args: unknown[]): void } };
 
@@ -25,12 +27,27 @@ type MigrationRuntimeCommands = Pick<
   | 'openNoteCenter'
   | 'listImportHistory'
   | 'getImportHistory'
-> & Partial<Pick<MigrationRuntime, 'logout'>>;
+> & Partial<Pick<MigrationRuntime, 'logout' | 'scanVivo'>>;
 
 export function registerMigrationIpc(
   ipcMain: IpcMainLike,
-  runtime: MigrationRuntimeCommands
+  runtime: MigrationRuntimeCommands,
+  licenseManager?: Pick<LicenseManager, 'getStatus' | 'activate' | 'deactivate'>,
+  updateManager?: Pick<UpdateManager, 'getStatus' | 'check' | 'download' | 'install'>
 ): void {
+  ipcMain.handle(ipcChannels.getUpdateStatus, async () => updateManager?.getStatus());
+  ipcMain.handle(ipcChannels.checkForUpdates, async () => updateManager?.check());
+  ipcMain.handle(ipcChannels.downloadUpdate, async () => updateManager?.download());
+  ipcMain.handle(ipcChannels.installUpdate, async () => updateManager?.install());
+  ipcMain.handle(ipcChannels.getLicenseStatus, async () => licenseManager?.getStatus() ?? ({ state: 'unconfigured', licenseId: null, message: '授权服务尚未配置' }));
+  ipcMain.handle(ipcChannels.activateLicense, async (_event, code) => {
+    if (!licenseManager) throw new Error('LICENSE_SERVICE_UNCONFIGURED');
+    return licenseManager.activate(String(code));
+  });
+  ipcMain.handle(ipcChannels.deactivateLicense, async () => {
+    if (!licenseManager) throw new Error('LICENSE_SERVICE_UNCONFIGURED');
+    return licenseManager.deactivate();
+  });
   ipcMain.handle(ipcChannels.getLoginState, async (_event, provider) =>
     runtime.getLoginState(parseProvider(provider))
   );
@@ -40,7 +57,13 @@ export function registerMigrationIpc(
   ipcMain.handle(ipcChannels.logout, async (_event, provider) =>
     runtime.logout?.(parseProvider(provider))
   );
-  ipcMain.handle(ipcChannels.scanXiaomi, async () => runtime.scanXiaomi());
+  ipcMain.handle(ipcChannels.scanXiaomi, async (event) => runtime.scanXiaomi((progress) =>
+    event.sender.send(ipcChannels.exportProgress, progress)
+  ));
+  ipcMain.handle(ipcChannels.scanVivo, async (event) => {
+    if (!runtime.scanVivo) throw new Error('VIVO_EXPORT_UNAVAILABLE');
+    return runtime.scanVivo((progress) => event.sender.send(ipcChannels.exportProgress, progress));
+  });
   ipcMain.handle(ipcChannels.getLatestExportSummary, async () =>
     runtime.getLatestExportSummary()
   );

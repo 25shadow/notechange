@@ -88,15 +88,21 @@ export class XiaomiProvider implements NotesProvider {
     if (note.warnings.some(({ code }) => code === 'encrypted-note')) {
       throw new Error('ENCRYPTED_NOTE');
     }
+    const uploadedAttachments = await Promise.all(note.attachments.map((attachment) => this.api.uploadImage(attachment)));
     const now = Date.now();
     const result = await this.api.createNote(
       JSON.stringify({
-        content: note.html,
+        content: withUploadedImages(note.html, note.attachments, uploadedAttachments),
+        setting: { data: uploadedAttachments },
         colorId: 0,
         folderId: targetFolderId ?? '0',
         alertDate: 0,
         createDate: note.createdAt ? Date.parse(note.createdAt) : now,
-        modifyDate: note.modifiedAt ? Date.parse(note.modifiedAt) : now
+        modifyDate: note.modifiedAt ? Date.parse(note.modifiedAt) : now,
+        extraInfo: JSON.stringify({
+          title: note.title,
+          note_content_type: 'common'
+        })
       })
     );
     return {
@@ -110,4 +116,28 @@ export class XiaomiProvider implements NotesProvider {
   async dispose(): Promise<void> {
     await rm(this.attachmentDirectory, { recursive: true, force: true });
   }
+}
+
+function withUploadedImages(
+  html: string,
+  attachments: CanonicalNote['attachments'],
+  uploaded: Array<{ fileId: string; digest: string; mimeType: string }>
+): string {
+  const bySourceId = new Map(
+    attachments.map((attachment, index) => [attachment.sourceId, uploaded[index]!])
+  );
+  const replaced = html.replace(/<img\b[^>]*\bsrc=["']https:\/\/notechange\.invalid\/attachment\/([^"']+)["'][^>]*>/gi, (_tag, encodedId: string) => {
+    const image = bySourceId.get(decodeURIComponent(encodedId));
+    return image ? xiaomiImageNode(image.fileId) : _tag;
+  });
+  const referenced = new Set([...replaced.matchAll(/data-fileid=["']([^"']+)["']/gi)].map((match) => match[1]));
+  return `${replaced}${uploaded.filter(({ fileId }) => !referenced.has(fileId)).map(({ fileId }) => xiaomiImageNode(fileId)).join('')}`;
+}
+
+function xiaomiImageNode(fileId: string): string {
+  return `<div data-fileid="${escapeHtmlAttribute(fileId)}" data-size="0" data-desc="" custom-img="true"></div>`;
+}
+
+function escapeHtmlAttribute(value: string): string {
+  return value.replace(/[&"<>]/g, (character) => ({ '&': '&amp;', '"': '&quot;', '<': '&lt;', '>': '&gt;' })[character] ?? character);
 }

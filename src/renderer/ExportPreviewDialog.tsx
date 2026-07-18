@@ -85,13 +85,14 @@ export function ExportPreviewDialog({
     setFilter(next);
     setOffset(0);
   };
+  const sourceName = summary?.source === 'vivo' ? 'vivo 原子笔记' : '小米笔记';
 
   return (
     <div className="preview-overlay" role="presentation">
-      <section className="preview-dialog" role="dialog" aria-modal="true" aria-label="小米笔记预览">
+      <section className="preview-dialog" role="dialog" aria-modal="true" aria-label={`${sourceName}预览`}>
         <header className="preview-dialog-header">
           <div>
-            <h2>小米笔记预览</h2>
+            <h2>{sourceName}预览</h2>
             <p>{summary ? `${summary.noteCount} 条笔记 · ${formatDate(summary.exportedAt)}` : '本地导出批次'}</p>
           </div>
           <button className="preview-icon-button" onClick={onClose} aria-label="关闭预览" title="关闭预览">

@@ -154,6 +154,10 @@ button:focus-visible, input:focus-visible { outline: 3px solid rgba(47, 93, 140,
 .picker-dialog { grid-template-columns: 1fr; border-color: #cbd6d0; }
 .picker-options { display: grid; gap: 10px; }
 .picker-options .button { justify-content: flex-start; width: 100%; }
+.license-status { position: fixed; right: 18px; bottom: 16px; display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px; border: 1px solid #bfcac4; border-radius: 6px; color: #365449; background: #f8faf9; font-size: 11px; cursor: pointer; }
+.update-status { position: fixed; right: 18px; bottom: 56px; height: 32px; padding: 0 10px; border: 1px solid #bfcac4; border-radius: 6px; color: #365449; background: #f8faf9; font-size: 11px; cursor: pointer; }
+.update-status:disabled { cursor: not-allowed; opacity: 0.55; }
+.license-code-input { width: 100%; height: 40px; padding: 0 11px; border: 1px solid #bdc8c2; border-radius: 6px; color: #24342d; background: #fff; font-family: ui-monospace, "SFMono-Regular", Menlo, monospace; font-size: 13px; letter-spacing: 0; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }

@@ -2,7 +2,8 @@ import type { CanonicalNote } from '../../shared/domain';
 import type {
   ImportAttachmentMetadata,
   ImportOutcome,
-  MigrationProgress
+  MigrationProgress,
+  ExportProgress
 } from '../../shared/ipc';
 import type { NotesProvider } from '../providers/provider';
 import { retryTransient } from './retry';
@@ -108,18 +109,6 @@ export class MigrationOrchestrator {
         });
         report.created += 1;
         await emitMigrationProgress(observer, bundle.notes.length, report, note, 'created');
-        for (const attachment of note.attachments) {
-          report.manualReview += 1;
-          await emitMigrationProgress(
-            observer,
-            bundle.notes.length,
-            report,
-            note,
-            'manual-review',
-            'VIVO_ATTACHMENT_UPLOAD_UNVERIFIED',
-            { filename: attachment.filename, mimeType: attachment.mimeType }
-          );
-        }
       } catch (error) {
         const errorClass = classifyMigrationError(error);
         const status = errorClass === 'ENCRYPTED_NOTE' ? 'manual-review' : 'failed';
@@ -166,27 +155,42 @@ async function emitMigrationProgress(
   });
 }
 
-export async function exportProviderNotes(source: NotesProvider): Promise<ExportBundle> {
+export async function exportProviderNotes(
+  source: NotesProvider,
+  observer?: (progress: Omit<ExportProgress, 'source'>) => unknown
+): Promise<ExportBundle> {
   const notes: CanonicalNote[] = [];
   let cursor: string | undefined;
+  let total = 0;
+  await observer?.({ total, completed: 0, stage: 'listing', current: null, occurredAt: new Date().toISOString() });
 
   do {
     const page = await source.listNotes(cursor);
+    total += page.items.length;
     for (const summary of page.items) {
-      const note = await source.getNote(summary.sourceId);
-      const attachments = await Promise.all(
-        note.attachments.map((attachment) => source.downloadAttachment(attachment))
-      );
-      notes.push({ ...note, attachments });
+      try {
+        const note = await source.getNote(summary.sourceId);
+        const attachments = await Promise.all(
+          note.attachments.map((attachment) => source.downloadAttachment(attachment))
+        );
+        notes.push({ ...note, attachments });
+        await observer?.({ total, completed: notes.length, stage: 'exporting', current: { sourceId: note.sourceId, title: note.title || '无标题' }, occurredAt: new Date().toISOString() });
+      } catch (error) {
+        const errorCode = classifyMigrationError(error);
+        await observer?.({ total, completed: notes.length, stage: 'failed', current: { sourceId: summary.sourceId, title: '无标题' }, errorCode, occurredAt: new Date().toISOString() });
+        throw error;
+      }
     }
     cursor = page.nextCursor ?? undefined;
   } while (cursor);
 
-  return {
+  const bundle = {
     notes,
     warningCount: notes.reduce((count, note) => count + note.warnings.length, 0),
     attachmentCount: notes.reduce((count, note) => count + note.attachments.length, 0)
   };
+  await observer?.({ total, completed: notes.length, stage: 'completed', current: null, occurredAt: new Date().toISOString() });
+  return bundle;
 }
 
 function classifyMigrationError(error: unknown): string {
