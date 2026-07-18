@@ -36,7 +36,7 @@ function createWindow(): void {
 app.whenReady().then(() => {
   migrationRuntime = new MigrationRuntime({
     sessionManager: new SessionManager(
-      { headless: false },
+      { headless: false, channel: 'chrome' },
       browserProfileRoot(app.getPath('userData'))
     ),
     createProvider,
