@@ -7,7 +7,8 @@ import {
   Eye,
   LoaderCircle,
   LogIn,
-  Trash2
+  Trash2,
+  Upload
 } from 'lucide-react';
 
 import type {
@@ -72,6 +73,7 @@ export function App({ api }: AppProps) {
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [exportPickerOpen, setExportPickerOpen] = useState(false);
+  const [openImportOnPreview, setOpenImportOnPreview] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([{ message: '应用已启动', time: formatTime(new Date()), kind: 'info' }]);
 
   const log = (message: string, kind: LogEntry['kind'] = 'info') => setLogs((current) => [{ message, time: formatTime(new Date()), kind }, ...current].slice(0, 6));
@@ -97,6 +99,12 @@ export function App({ api }: AppProps) {
   const connect = async (provider: CloudProvider) => {
     setError(null); setLoadingProvider(provider);
     try {
+      if (login[provider].authenticated) {
+        await migrationApi.logout?.(provider);
+        setLogin((current) => ({ ...current, [provider]: disconnected }));
+        log(`${provider === 'xiaomi' ? '小米' : 'vivo'}账号已退出登录`, 'success');
+        return;
+      }
       const state = await migrationApi.startLogin(provider);
       setLogin((current) => ({ ...current, [provider]: state }));
       log(`${provider === 'xiaomi' ? '小米' : 'vivo'}账号登录成功`);
@@ -117,11 +125,11 @@ export function App({ api }: AppProps) {
     } finally { setScanning(false); }
   };
 
-  const openPreview = async (summary: LocalExportSummary) => {
+  const openPreview = async (summary: LocalExportSummary, openImport = false) => {
     setError(null);
     try {
       const selected = await migrationApi.selectExport(summary.batchId);
-      setSelectedExport(selected); setPreviewOpen(true); log(`打开批次 ${summary.batchId}`);
+      setSelectedExport(selected); setOpenImportOnPreview(openImport); setPreviewOpen(true); log(`${openImport ? '打开导入' : '打开查看'}：${summary.batchId}`);
     } catch { setError('无法读取所选本地批次。'); log('打开批次失败'); }
   };
 
@@ -184,16 +192,16 @@ export function App({ api }: AppProps) {
 
         {exports.length ? <div className="preview-area">
           <table className="export-table" aria-label="本地导出批次">
-            <thead><tr><th>导出时间</th><th>笔记</th><th>附件</th><th>操作</th></tr></thead>
+            <thead><tr><th>来源</th><th>导出时间</th><th>笔记</th><th>附件</th><th>操作</th></tr></thead>
             <tbody>{exports.map((summary) => <tr key={summary.batchId} className={selectedExport?.batchId === summary.batchId ? 'selected' : ''}>
-              <td data-label="导出时间">{formatDate(summary.exportedAt)}</td><td data-label="笔记">{summary.noteCount}</td><td data-label="附件">{summary.attachmentCount}</td>
-              <td data-label="操作"><div className="export-actions"><button className="button compact secondary" onClick={() => void openPreview(summary)}><Eye size={15} />查看</button><button className="button compact danger" aria-label={`删除批次 ${summary.batchId}`} onClick={() => setDeleteTarget(summary)}><Trash2 size={15} />删除</button></div></td>
+              <td data-label="来源">小米云笔记</td><td data-label="导出时间">{formatDate(summary.exportedAt)}</td><td data-label="笔记">{summary.noteCount}</td><td data-label="附件">{summary.attachmentCount}</td>
+              <td data-label="操作"><div className="export-actions"><button className="button compact primary" onClick={() => void openPreview(summary, true)}><Upload size={15} />导入</button><button className="button compact secondary" onClick={() => void openPreview(summary)}><Eye size={15} />查看</button><button className="button compact danger" aria-label={`删除批次 ${summary.batchId}`} onClick={() => setDeleteTarget(summary)}><Trash2 size={15} />删除</button></div></td>
             </tr>)}</tbody>
           </table>
         </div> : <div className="empty-state"><Download size={22} /><span>尚未生成导出批次</span></div>}
       </section>
 
-      {previewOpen && selectedExport && <ExportPreviewDialog api={migrationApi} summary={selectedExport} vivoAuthenticated={login.vivo.authenticated} onRequestImport={importToVivo} onClose={() => setPreviewOpen(false)} />}
+      {previewOpen && selectedExport && <ExportPreviewDialog api={migrationApi} summary={selectedExport} vivoAuthenticated={login.vivo.authenticated} initialImportOpen={openImportOnPreview} onRequestImport={importToVivo} onClose={() => { setOpenImportOnPreview(false); setPreviewOpen(false); }} />}
       {deleteTarget && <DeleteExportDialog summary={deleteTarget} deleting={deleting} onCancel={() => !deleting && setDeleteTarget(null)} onConfirm={() => void deleteExport()} />}
       {exportPickerOpen && <ExportPickerDialog xiaomiConnected={xiaomiConnected} scanning={scanning} onCancel={() => setExportPickerOpen(false)} onExportXiaomi={() => void scan()} />}
     </main>
@@ -230,8 +238,8 @@ function ProviderPanel({
       </div>
       <div className="provider-status">
         {state.authenticated && <span className="connected"><CheckCircle2 size={16} />已登录</span>}
-        <button className="button compact secondary login-button" onClick={onConnect} title={`${state.authenticated ? '重新登录' : '登录'}${name}`} aria-label={`${state.authenticated ? '重新登录' : '登录'}${name}`}>
-          {loading ? <LoaderCircle className="spin" size={16} /> : <LogIn size={16} />}{state.authenticated ? '重新登录' : '登录'}
+        <button className="button compact secondary login-button" onClick={onConnect} title={`${state.authenticated ? '退出登录' : '登录'}${name}`} aria-label={`${state.authenticated ? '退出登录' : '登录'}${name}`}>
+          {loading ? <LoaderCircle className="spin" size={16} /> : <LogIn size={16} />}{state.authenticated ? '退出登录' : '登录'}
         </button>
       </div>
     </article>

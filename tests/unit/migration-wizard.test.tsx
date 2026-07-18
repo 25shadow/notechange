@@ -68,10 +68,13 @@ describe('小米到 vivo 迁移工作区', () => {
     const statistics = await screen.findByRole('table', { name: '本地导出批次' });
     expect(within(statistics).getByText('12')).toBeTruthy();
     expect(within(statistics).getByText('4')).toBeTruthy();
+    expect(within(statistics).getByText('小米云笔记')).toBeTruthy();
+    const actions = within(statistics).getAllByRole('button').map((button) => button.textContent);
+    expect(actions.indexOf('导入')).toBeLessThan(actions.indexOf('查看'));
     expect(within(statistics).queryByText('需处理')).toBeNull();
     expect(screen.queryByRole('checkbox', { name: '我已核对目标账号和迁移数量' })).toBeNull();
     expect(screen.getByText('小米笔记导出成功')).toBeVisible();
-    expect(screen.getByRole('button', { name: '重新登录小米云笔记' })).toBeVisible();
+    expect(screen.getByRole('button', { name: '退出登录小米云笔记' })).toBeVisible();
     expect(screen.getAllByRole('log').length).toBeGreaterThanOrEqual(1);
   });
 

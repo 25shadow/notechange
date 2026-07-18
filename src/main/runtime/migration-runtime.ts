@@ -30,6 +30,7 @@ export interface RuntimeSessionManager {
   getPage(provider: string): Page | null;
   open(provider: string, url: string, mode?: BrowserMode): Promise<Page>;
   persist(provider: string): Promise<void>;
+  logout?(provider: string): Promise<void>;
   switchToHeaded(provider: string, url: string): Promise<Page>;
   switchToHeadless(provider: string, url: string): Promise<Page>;
   disposeAll(): Promise<void>;
@@ -130,6 +131,10 @@ export class MigrationRuntime {
       if (attempt < 9) await sleep(Math.min(polling.intervalMs, 500));
     }
     return state;
+  }
+
+  async logout(provider: CloudProvider): Promise<void> {
+    await this.options.sessionManager.logout?.(provider);
   }
 
   async scanXiaomi(): Promise<ScanSummary> {

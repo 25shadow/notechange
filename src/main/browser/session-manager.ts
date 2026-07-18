@@ -1,4 +1,4 @@
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -89,6 +89,19 @@ export class SessionManager {
   async disposeAll(): Promise<void> {
     await Promise.allSettled([...this.pendingOpens.values()]);
     await Promise.all([...this.contexts.keys()].map((provider) => this.dispose(provider)));
+  }
+
+  async logout(provider: string): Promise<void> {
+    const managed = this.contexts.get(provider);
+    if (managed) {
+      this.contexts.delete(provider);
+      await managed.context.clearCookies();
+      await managed.context.close();
+      await rm(join(managed.userDataDirectory, sessionFileName), { force: true });
+      return;
+    }
+    const safeProvider = provider.replace(/[^a-z0-9_-]/gi, '_');
+    await rm(join(this.rootDirectory, safeProvider, sessionFileName), { force: true });
   }
 
   private async switchMode(provider: string, url: string, mode: BrowserMode): Promise<Page> {

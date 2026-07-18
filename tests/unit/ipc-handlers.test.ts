@@ -14,6 +14,7 @@ describe('registerMigrationIpc', () => {
     const runtime = {
       getLoginState: vi.fn(async () => ({ authenticated: false, accountLabel: null })),
       startLogin: vi.fn(async () => ({ authenticated: true, accountLabel: null })),
+      logout: vi.fn(async () => undefined),
       scanXiaomi: vi.fn(async () => ({ noteCount: 0, attachmentCount: 0, warningCount: 0 })),
       getLatestExportSummary: vi.fn(async () => null),
       listExports: vi.fn(async () => []),
@@ -48,6 +49,8 @@ describe('registerMigrationIpc', () => {
 
     await handlers.get(ipcChannels.listExports)?.({});
     expect(runtime.listExports).toHaveBeenCalledOnce();
+    await handlers.get(ipcChannels.logout)?.({}, 'xiaomi');
+    expect(runtime.logout).toHaveBeenCalledWith('xiaomi');
     await handlers.get(ipcChannels.selectExport)?.({}, 'batch-1');
     expect(runtime.selectExport).toHaveBeenCalledWith('batch-1');
     await handlers.get(ipcChannels.deleteExport)?.({}, 'batch-1');

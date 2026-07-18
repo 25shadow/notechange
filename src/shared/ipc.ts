@@ -69,6 +69,7 @@ export type RendererMigrationReport = {
 export interface NoteChangeApi {
   getLoginState(provider: CloudProvider): Promise<RendererLoginState>;
   startLogin(provider: CloudProvider): Promise<RendererLoginState>;
+  logout?(provider: CloudProvider): Promise<void>;
   scanXiaomi(): Promise<ScanSummary>;
   getLatestExportSummary(): Promise<LocalExportSummary | null>;
   listExports(): Promise<LocalExportSummary[]>;
@@ -85,6 +86,7 @@ export interface NoteChangeApi {
 export const ipcChannels = {
   getLoginState: 'notechange:get-login-state',
   startLogin: 'notechange:start-login',
+  logout: 'notechange:logout',
   scanXiaomi: 'notechange:scan-xiaomi',
   getLatestExportSummary: 'notechange:get-latest-export-summary',
   listExports: 'notechange:list-exports',

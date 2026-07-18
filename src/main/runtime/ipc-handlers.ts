@@ -20,7 +20,7 @@ type MigrationRuntimeCommands = Pick<
   | 'confirmMigration'
   | 'startImport'
   | 'cancelMigration'
->;
+> & Partial<Pick<MigrationRuntime, 'logout'>>;
 
 export function registerMigrationIpc(
   ipcMain: IpcMainLike,
@@ -31,6 +31,9 @@ export function registerMigrationIpc(
   );
   ipcMain.handle(ipcChannels.startLogin, async (_event, provider) =>
     runtime.startLogin(parseProvider(provider))
+  );
+  ipcMain.handle(ipcChannels.logout, async (_event, provider) =>
+    runtime.logout?.(parseProvider(provider))
   );
   ipcMain.handle(ipcChannels.scanXiaomi, async () => runtime.scanXiaomi());
   ipcMain.handle(ipcChannels.getLatestExportSummary, async () =>

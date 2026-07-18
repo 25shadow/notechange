@@ -159,6 +159,25 @@ describe('SessionManager headless transition', () => {
     await expect(stat(join(root, 'xiaomi', 'notechange-session.json'))).resolves.toBeDefined();
     await manager.disposeAll();
   });
+
+  it('退出登录时清除浏览器 Cookie 和本地会话快照', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'notechange-session-test-'));
+    directories.push(root);
+    const context = fakeContext(fakePage());
+    const manager = new SessionManager(
+      { headless: false },
+      root,
+      { launchPersistentContext: vi.fn(async () => context) }
+    );
+
+    await manager.open('xiaomi', 'https://i.mi.com/note/h5#/', 'headless');
+    await manager.persist('xiaomi');
+    await manager.logout('xiaomi');
+
+    expect(context.clearCookies).toHaveBeenCalledOnce();
+    expect(context.close).toHaveBeenCalledOnce();
+    await expect(stat(join(root, 'xiaomi', 'notechange-session.json'))).rejects.toMatchObject({ code: 'ENOENT' });
+  });
 });
 
 function fakePage(): Page & { goto: ReturnType<typeof vi.fn> } {
@@ -173,6 +192,7 @@ function fakeContext(
 ): BrowserContext & {
   cookies: ReturnType<typeof vi.fn>;
   addCookies: ReturnType<typeof vi.fn>;
+  clearCookies: ReturnType<typeof vi.fn>;
   close: ReturnType<typeof vi.fn>;
 } {
   return {
@@ -180,10 +200,12 @@ function fakeContext(
     newPage: vi.fn(async () => page),
     cookies: vi.fn(async () => cookies),
     addCookies: vi.fn(async () => undefined),
+    clearCookies: vi.fn(async () => undefined),
     close: vi.fn(async () => undefined)
   } as unknown as BrowserContext & {
     cookies: ReturnType<typeof vi.fn>;
     addCookies: ReturnType<typeof vi.fn>;
+    clearCookies: ReturnType<typeof vi.fn>;
     close: ReturnType<typeof vi.fn>;
   };
 }

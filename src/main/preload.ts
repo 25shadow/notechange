@@ -11,6 +11,7 @@ const api: NoteChangeApi = {
     ipcRenderer.invoke(ipcChannels.getLoginState, provider),
   startLogin: (provider: CloudProvider) =>
     ipcRenderer.invoke(ipcChannels.startLogin, provider),
+  logout: (provider: CloudProvider) => ipcRenderer.invoke(ipcChannels.logout, provider),
   scanXiaomi: () => ipcRenderer.invoke(ipcChannels.scanXiaomi),
   getLatestExportSummary: () => ipcRenderer.invoke(ipcChannels.getLatestExportSummary),
   listExports: () => ipcRenderer.invoke(ipcChannels.listExports),

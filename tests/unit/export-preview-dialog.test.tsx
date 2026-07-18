@@ -2,7 +2,7 @@
 
 import '@testing-library/jest-dom/vitest';
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { App, type RendererMigrationApi } from '../../src/renderer/App';
@@ -50,7 +50,8 @@ describe('导出笔记预览', () => {
     };
     render(<App api={api} />);
     fireEvent.click(await screen.findByRole('button', { name: '查看' }));
-    fireEvent.click(await screen.findByRole('button', { name: '导入' }));
+    const preview = await screen.findByRole('dialog', { name: '小米笔记预览' });
+    fireEvent.click(within(preview).getByRole('button', { name: '导入' }));
     expect(screen.getByRole('button', { name: 'vivo 原子笔记' })).toBeDisabled();
   });
 
@@ -132,7 +133,8 @@ describe('导出笔记预览', () => {
     expect(screen.queryByText('需处理')).toBeNull();
     expect(screen.queryByText('包含需核对内容')).toBeNull();
 
-    fireEvent.click(screen.getByRole('button', { name: '导入' }));
+    const preview = screen.getByRole('dialog', { name: '小米笔记预览' });
+    fireEvent.click(within(preview).getByRole('button', { name: '导入' }));
     expect(await screen.findByRole('dialog', { name: '选择导入平台' })).toBeVisible();
     expect(screen.getByRole('button', { name: 'vivo 原子笔记' })).toBeEnabled();
     fireEvent.click(screen.getByRole('button', { name: 'vivo 原子笔记' }));

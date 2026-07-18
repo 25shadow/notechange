@@ -25,12 +25,14 @@ export function ExportPreviewDialog({
   summary,
   onClose,
   vivoAuthenticated,
+  initialImportOpen = false,
   onRequestImport
 }: {
   api: NoteChangeApi;
   summary: LocalExportSummary | null;
   onClose: () => void;
   vivoAuthenticated: boolean;
+  initialImportOpen?: boolean;
   onRequestImport: () => Promise<RendererMigrationReport>;
 }) {
   const [search, setSearch] = useState('');
@@ -44,6 +46,10 @@ export function ExportPreviewDialog({
   const [importPickerOpen, setImportPickerOpen] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (initialImportOpen) setImportPickerOpen(true);
+  }, [initialImportOpen]);
 
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => {
