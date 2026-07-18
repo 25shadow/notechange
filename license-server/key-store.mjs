@@ -3,13 +3,11 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 const keyFileName = 'signing-keys.json';
-const adminTokenFileName = 'admin-token';
 
 export async function ensureLicenseConfiguration(dataDir) {
   await mkdir(dataDir, { recursive: true, mode: 0o700 });
   const keys = await loadOrCreateKeys(dataDir);
-  const adminToken = process.env.LICENSE_ADMIN_TOKEN || await loadOrCreateAdminToken(dataDir);
-  return { ...keys, adminToken };
+  return keys;
 }
 
 export async function readPublicKey(dataDir) {
@@ -33,14 +31,6 @@ async function loadOrCreateKeys(dataDir) {
   };
   await atomicWrite(file, JSON.stringify(keys), 0o600);
   return keys;
-}
-
-async function loadOrCreateAdminToken(dataDir) {
-  const file = join(dataDir, adminTokenFileName);
-  try { return (await readFile(file, 'utf8')).trim(); } catch { /* generated below */ }
-  const token = process.env.LICENSE_ADMIN_TOKEN || randomBytes(32).toString('base64url');
-  await atomicWrite(file, token, 0o600);
-  return token;
 }
 
 async function atomicWrite(file, value, mode) {
