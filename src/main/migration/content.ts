@@ -27,14 +27,15 @@ export function normalizeContent(
   context: ContentHashContext = {}
 ): NormalizedContent {
   const window = new JSDOM('').window;
-  const source = JSDOM.fragment(inputHtml);
+  const normalizedHtml = normalizeLegacyTags(JSDOM.fragment(inputHtml));
+  const source = JSDOM.fragment(normalizedHtml);
   const unsupportedTags = new Set(
     [...source.querySelectorAll('*')]
       .map((element) => element.tagName.toLowerCase())
       .filter((tag) => !allowedTagSet.has(tag) && tag !== 'script')
   );
   const purifier = createDOMPurify(window);
-  const html = purifier.sanitize(inputHtml, {
+  const html = purifier.sanitize(normalizedHtml, {
     ALLOWED_TAGS: allowedTags,
     ALLOWED_ATTR: allowedAttributes
   });
@@ -61,4 +62,18 @@ export function normalizeContent(
       message: `包含无法自动迁移的 HTML 标签：${tag}`
     }))
   };
+}
+
+function normalizeLegacyTags(source: DocumentFragment): string {
+  for (const bold of source.querySelectorAll('b')) {
+    const strong = source.ownerDocument.createElement('strong');
+    strong.replaceChildren(...Array.from(bold.childNodes));
+    bold.replaceWith(strong);
+  }
+  for (const size of source.querySelectorAll('size')) {
+    size.replaceWith(...Array.from(size.childNodes));
+  }
+  const container = source.ownerDocument.createElement('div');
+  container.append(source);
+  return container.innerHTML;
 }

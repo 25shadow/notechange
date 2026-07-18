@@ -20,4 +20,12 @@ describe('normalizeContent', () => {
       expect.objectContaining({ code: 'unsupported-content' })
     );
   });
+
+  it('兼容小米旧版 b 和 size 标签', () => {
+    const output = normalizeContent('<p><b>粗体</b><size>大字</size></p>');
+
+    expect(output.html).toBe('<p><strong>粗体</strong>大字</p>');
+    expect(output.plainText).toBe('粗体大字');
+    expect(output.warnings).toEqual([]);
+  });
 });
