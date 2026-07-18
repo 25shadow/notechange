@@ -6,10 +6,54 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { App, type RendererMigrationApi } from '../../src/renderer/App';
+import { ExportPreviewDialog } from '../../src/renderer/ExportPreviewDialog';
 
 afterEach(cleanup);
 
 describe('导出笔记预览', () => {
+  const previewApi = (): RendererMigrationApi => ({
+    getLoginState: vi.fn(async () => ({ authenticated: true, accountLabel: null })), startLogin: vi.fn(), scanXiaomi: vi.fn(),
+    getLatestExportSummary: vi.fn(async () => null), listExports: vi.fn(async () => []), selectExport: vi.fn(), deleteExport: vi.fn(),
+    getExportPreview: vi.fn(async () => ({ total: 1, items: [{ sourceId: 'n1', title: '标题', excerpt: '正文', modifiedAt: null, attachmentCount: 0, warningCount: 0 }] })),
+    getExportPreviewDetail: vi.fn(async () => ({ sourceId: 'n1', folderSourceId: null, title: '标题', plainText: '正文', createdAt: null, modifiedAt: null, attachments: [], warnings: [] })),
+    getExportAttachment: vi.fn(), confirmMigration: vi.fn(), startImport: vi.fn(), cancelMigration: vi.fn()
+  });
+
+  it('预览组件在 vivo 未登录时禁用导入', async () => {
+    render(<ExportPreviewDialog api={previewApi()} summary={{ batchId: 'b', exportedAt: '2026-07-17T00:00:00Z', noteCount: 1, attachmentCount: 0, warningCount: 0 }} vivoAuthenticated={false} onRequestImport={vi.fn()} onClose={vi.fn()} />);
+    fireEvent.click(await screen.findByRole('button', { name: '导入' }));
+    expect(screen.getByRole('button', { name: 'vivo 原子笔记' })).toBeDisabled();
+  });
+
+  it.each([
+    [{ created: 1, skipped: 0, failed: 2, manualReview: 0, cancelled: false }, '导入完成但有失败'],
+    [{ created: 1, skipped: 0, failed: 0, manualReview: 0, cancelled: true }, '导入已取消']
+  ] as const)('显示导入状态：%s', async (report, message) => {
+    const onRequestImport = vi.fn(async () => report);
+    render(<ExportPreviewDialog api={previewApi()} summary={{ batchId: 'b', exportedAt: '2026-07-17T00:00:00Z', noteCount: 1, attachmentCount: 0, warningCount: 0 }} vivoAuthenticated onRequestImport={onRequestImport} onClose={vi.fn()} />);
+    fireEvent.click(await screen.findByRole('button', { name: '导入' }));
+    fireEvent.click(screen.getByRole('button', { name: 'vivo 原子笔记' }));
+    expect(await screen.findByText(new RegExp(message))).toBeVisible();
+  });
+
+  it('vivo 未登录时导入选项禁用', async () => {
+    const api: RendererMigrationApi = {
+      getLoginState: vi.fn(async (provider) => ({ authenticated: provider === 'xiaomi', accountLabel: null })),
+      startLogin: vi.fn(), scanXiaomi: vi.fn(),
+      getLatestExportSummary: vi.fn(async () => null),
+      listExports: vi.fn(async () => [{ batchId: 'batch-1', exportedAt: '2026-07-17T00:00:00.000Z', noteCount: 1, attachmentCount: 0, warningCount: 0 }]),
+      selectExport: vi.fn(async () => ({ batchId: 'batch-1', exportedAt: '2026-07-17T00:00:00.000Z', noteCount: 1, attachmentCount: 0, warningCount: 0 })),
+      deleteExport: vi.fn(),
+      getExportPreview: vi.fn(async () => ({ total: 1, items: [{ sourceId: 'n1', title: '标题', excerpt: '正文', modifiedAt: null, attachmentCount: 0, warningCount: 0 }] })),
+      getExportPreviewDetail: vi.fn(async () => ({ sourceId: 'n1', folderSourceId: null, title: '标题', plainText: '正文', createdAt: null, modifiedAt: null, attachments: [], warnings: [] })),
+      getExportAttachment: vi.fn(), confirmMigration: vi.fn(), startImport: vi.fn(), cancelMigration: vi.fn()
+    };
+    render(<App api={api} />);
+    fireEvent.click(await screen.findByRole('button', { name: '查看' }));
+    fireEvent.click(await screen.findByRole('button', { name: '导入' }));
+    expect(screen.getByRole('button', { name: 'vivo 原子笔记' })).toBeDisabled();
+  });
+
   it('恢复本地批次并搜索查看纯文本详情', async () => {
     const api: RendererMigrationApi = {
       getLoginState: vi.fn(async () => ({ authenticated: true, accountLabel: null })),
