@@ -73,6 +73,27 @@ function normalizeLegacyTags(source: DocumentFragment): string {
   for (const size of source.querySelectorAll('size')) {
     size.replaceWith(...Array.from(size.childNodes));
   }
+  for (const tag of [
+    'text',
+    'background',
+    'mid-size',
+    'new-format',
+    'order',
+    'h3-size',
+    'sound',
+    'input',
+    'todo',
+    'item',
+    'bullet',
+    'link',
+    'center',
+    'right',
+    'left'
+  ]) {
+    for (const element of source.querySelectorAll(tag)) {
+      element.replaceWith(...Array.from(element.childNodes));
+    }
+  }
   const container = source.ownerDocument.createElement('div');
   container.append(source);
   return container.innerHTML;

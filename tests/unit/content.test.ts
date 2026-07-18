@@ -28,4 +28,13 @@ describe('normalizeContent', () => {
     expect(output.plainText).toBe('粗体大字');
     expect(output.warnings).toEqual([]);
   });
+
+  it('不把小米正文结构标签误报为无法迁移', () => {
+    const output = normalizeContent(
+      '<text>正文</text><background>背景字</background><mid-size>小米字</mid-size><new-format>新格式</new-format><order>排序</order>'
+    );
+
+    expect(output.plainText).toBe('正文背景字小米字新格式排序');
+    expect(output.warnings).toEqual([]);
+  });
 });
