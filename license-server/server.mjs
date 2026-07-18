@@ -1,11 +1,14 @@
 import { createHash, randomBytes, randomUUID, sign } from 'node:crypto';
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { createReadStream } from 'node:fs';
+import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { ensureLicenseConfiguration } from './key-store.mjs';
 import { createAdminSession, hasAdminPassword, hasAdminSession, setAdminPassword, verifyAdminPassword } from './admin-auth.mjs';
+import { readArtifact, storeArtifact } from './artifact-store.mjs';
+import { renderAdminConsole } from './admin-console.mjs';
 
 const port = Number(process.env.LICENSE_PORT || 8787);
 const dataDir = process.env.LICENSE_DATA_DIR || join(homedir(), '.notechange-license');
@@ -21,10 +24,11 @@ createServer(async (request, response) => {
     if (request.method === 'GET' && url.pathname === '/health') return json(response, 200, { ok: true });
     if (request.method === 'GET' && url.pathname === '/admin') {
       if (!await hasAdminPassword(dataDir)) return html(response, setupPage);
-      return html(response, hasAdminSession(request.headers.cookie) ? adminConsolePageWithUpdate : loginPage);
+      return html(response, hasAdminSession(request.headers.cookie) ? renderAdminConsole() : loginPage);
     }
     if (request.method === 'GET' && url.pathname === '/admin/deploy') return html(response, deploymentPageV2);
     if (request.method === 'GET' && (url.pathname === '/latest.yml' || url.pathname === '/latest-mac.yml')) return updateManifest(response, url.pathname);
+    if (request.method === 'GET' && url.pathname.startsWith('/releases/')) return serveArtifact(response, url.pathname);
     if (request.method === 'POST' && url.pathname === '/v1/licenses/activate') return activate(request, response);
     if (request.method === 'POST' && url.pathname === '/v1/licenses/deactivate') return deactivate(request, response);
     if (request.method === 'POST' && url.pathname === '/v1/admin/setup') return setupAdmin(request, response);
@@ -88,6 +92,8 @@ async function deactivate(request, response) {
 
 async function admin(request, response, url) {
   if (!hasAdminSession(request.headers.cookie)) return json(response, 401, { error: 'ADMIN_UNAUTHORIZED' });
+  if (request.method === 'GET' && url.pathname === '/v1/admin/system-status') return json(response, 200, await systemStatus());
+  if (request.method === 'POST' && url.pathname === '/v1/admin/artifacts') return uploadArtifact(request, response);
   if (request.method === 'GET' && url.pathname === '/v1/admin/source-update') return json(response, 200, sourceUpdate);
   if (request.method === 'POST' && url.pathname === '/v1/admin/source-update/check') return checkSourceUpdate(response);
   if (request.method === 'POST' && url.pathname === '/v1/admin/source-update/apply') return applySourceUpdate(response);
@@ -95,9 +101,10 @@ async function admin(request, response, url) {
   if (request.method === 'GET' && url.pathname === '/v1/admin/releases') return json(response, 200, { releases: database.releases });
   if (request.method === 'POST' && url.pathname === '/v1/admin/releases') {
     const { version, platform, path, sha512, releaseNotes = '' } = await body(request);
-    if (!/^\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)?$/.test(String(version)) || !['win', 'mac'].includes(platform) || !/^[A-Za-z0-9._/-]+$/.test(String(path)) || typeof sha512 !== 'string' || sha512.length < 32) return json(response, 400, { error: 'INVALID_RELEASE' });
+    const artifact = database.artifacts.find((item) => item.path === path && item.sha512 === sha512);
+    if (!/^\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)?$/.test(String(version)) || !['win', 'mac'].includes(platform) || !artifact) return json(response, 400, { error: 'INVALID_RELEASE' });
     database.releases = database.releases.filter((item) => item.platform !== platform);
-    database.releases.push({ version, platform, path, sha512, releaseNotes: String(releaseNotes).slice(0, 1000), publishedAt: new Date().toISOString(), enabled: true });
+    database.releases.push({ version, platform, path: artifact.path, sha512: artifact.sha512, releaseNotes: String(releaseNotes).slice(0, 1000), publishedAt: new Date().toISOString(), enabled: true });
     await saveDatabase(); return json(response, 201, { release: database.releases.at(-1) });
   }
   const releaseMatch = url.pathname.match(/^\/v1\/admin\/releases\/(win|mac)\/(enable|disable)$/);
@@ -125,6 +132,37 @@ async function admin(request, response, url) {
     await saveDatabase(); return json(response, 200, { code: publicRecord(record) });
   }
   return json(response, 404, { error: 'NOT_FOUND' });
+}
+
+async function uploadArtifact(request, response) {
+  try {
+    const artifact = await storeArtifact(dataDir, request, request.headers['x-file-name']);
+    database.artifacts = database.artifacts.filter((item) => item.path !== artifact.path);
+    database.artifacts.push({ ...artifact, uploadedAt: new Date().toISOString() });
+    await saveDatabase();
+    return json(response, 201, { artifact });
+  } catch (error) {
+    return json(response, 400, { error: error instanceof Error ? error.message : 'ARTIFACT_UPLOAD_FAILED' });
+  }
+}
+
+async function serveArtifact(response, pathname) {
+  const artifact = await readArtifact(dataDir, decodeURIComponent(pathname.slice('/releases/'.length)));
+  if (!artifact || !artifact.stat.isFile()) return json(response, 404, { error: 'ARTIFACT_NOT_FOUND' });
+  response.writeHead(200, { 'content-type': 'application/octet-stream', 'content-length': artifact.stat.size, 'content-disposition': `attachment; filename="${pathname.split('/').at(-1)}"` });
+  return createReadStream(artifact.file).pipe(response);
+}
+
+async function systemStatus() {
+  const state = async (file) => { try { const info = await stat(file); return { path: file, present: true, updatedAt: info.mtime.toISOString() }; } catch { return { path: file, present: false, updatedAt: null }; } };
+  const keys = await state(join(dataDir, 'signing-keys.json'));
+  return {
+    dataDirectory: dataDir,
+    signingKeys: { path: keys.path, privateKeyGenerated: keys.present, publicKeyGenerated: keys.present, updatedAt: keys.updatedAt },
+    administratorPassword: await state(join(dataDir, 'admin-password.json')),
+    licenseDatabase: { ...(await state(databaseFile)), codeCount: database.codes.length, releaseCount: database.releases.length },
+    releaseDirectory: await state(join(dataDir, 'releases'))
+  };
 }
 
 async function checkSourceUpdate(response) {
@@ -199,7 +237,7 @@ function publicRecord(record) { const { hash, ...rest } = record; return { ...re
 async function body(request) { let raw = ''; for await (const chunk of request) raw += chunk; try { return JSON.parse(raw || '{}'); } catch { return {}; } }
 function json(response, status, data) { response.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }); response.end(JSON.stringify(data)); }
 function html(response, content) { response.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' }); response.end(content); }
-async function loadDatabase() { try { const value = JSON.parse(await readFile(databaseFile, 'utf8')); return Array.isArray(value.codes) ? { codes: value.codes, releases: Array.isArray(value.releases) ? value.releases : [] } : { codes: [], releases: [] }; } catch { return { codes: [], releases: [] }; } }
+async function loadDatabase() { try { const value = JSON.parse(await readFile(databaseFile, 'utf8')); return Array.isArray(value.codes) ? { codes: value.codes, releases: Array.isArray(value.releases) ? value.releases : [], artifacts: Array.isArray(value.artifacts) ? value.artifacts : [] } : { codes: [], releases: [], artifacts: [] }; } catch { return { codes: [], releases: [], artifacts: [] }; } }
 async function saveDatabase() { await mkdir(dataDir, { recursive: true, mode: 0o700 }); const temporary = `${databaseFile}.${randomUUID()}.tmp`; await writeFile(temporary, JSON.stringify(database), { mode: 0o600 }); await rename(temporary, databaseFile); }
 
 const deploymentPage = `<!doctype html><meta charset="utf-8"><title>NoteChange 部署引导</title><style>body{font:15px system-ui;max-width:820px;margin:40px auto;padding:0 18px;color:#1e2a24}h1{font-size:24px}h2{margin-top:32px;font-size:18px}code,pre{font-family:ui-monospace,monospace}pre{padding:14px;border:1px solid #d7dfda;border-radius:6px;background:#f5f8f6;white-space:pre-wrap}li{margin:8px 0}.tip{padding:12px;border-left:3px solid #287154;background:#edf7f1}</style><p><a href="/admin">返回管理后台</a></p><h1>部署引导</h1><p>按顺序完成服务器、授权服务、HTTPS、桌面应用构建和版本发布。</p><h2>1. 初始化服务器</h2><pre>git clone &lt;仓库地址&gt; notechange; cd notechange; npm ci; npm run license:keys</pre><p>保存私钥和公钥。私钥只放在服务器，公钥用于构建桌面应用。</p><h2>2. 配置并启动授权服务</h2><pre>LICENSE_ADMIN_TOKEN='至少 32 位随机字符串'; LICENSE_PRIVATE_KEY_PEM='生成的私钥 PEM'; LICENSE_PORT=8787; LICENSE_DATA_DIR='/var/lib/notechange-license'; npm run license-server</pre><h2>3. 配置域名和 HTTPS</h2><p>用 Nginx 将 https://license.example.com 反向代理到 127.0.0.1:8787，并使用 Certbot 配置证书。不要直接暴露 8787 端口。</p><h2>4. 构建桌面应用</h2><pre>NOTECHANGE_LICENSE_SERVER_URL='https://license.example.com'; NOTECHANGE_UPDATE_URL='https://license.example.com'; NOTECHANGE_LICENSE_PUBLIC_KEY='生成的公钥 PEM'; npm run dist:mac; npm run dist:win</pre><h2>5. 发布更新</h2><ol><li>上传 macOS/Windows 安装包和 blockmap。</li><li>返回管理后台，填写版本、平台、文件相对路径和 SHA-512。</li><li>发布后客户端读取 latest.yml 或 latest-mac.yml。</li></ol><p class="tip">macOS 正式发布需要 Developer ID 签名和公证；Windows 建议使用代码签名证书。</p>`;
