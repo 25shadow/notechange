@@ -9,6 +9,7 @@ import { ensureLicenseConfiguration } from './key-store.mjs';
 import { createAdminSession, hasAdminPassword, hasAdminSession, setAdminPassword, verifyAdminPassword } from './admin-auth.mjs';
 import { readArtifact, storeArtifact } from './artifact-store.mjs';
 import { renderAdminConsole } from './admin-console.mjs';
+import { updateRestartExitCode } from './restart-policy.mjs';
 
 const port = Number(process.env.LICENSE_PORT || 8787);
 const dataDir = process.env.LICENSE_DATA_DIR || join(homedir(), '.notechange-license');
@@ -197,7 +198,7 @@ async function applySourceUpdate(response) {
     json(response, 200, result);
     if (result.restartScheduled) {
       // BaoTa's Node project supervisor starts this process again after it exits.
-      setTimeout(() => process.exit(0), 1500).unref();
+      setTimeout(() => process.exit(updateRestartExitCode), 1500).unref();
     }
     return;
   } catch (error) {

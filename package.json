@@ -10,7 +10,7 @@
     "dist:win": "npm run build && electron-builder --win --publish never",
     "release:mac": "node license-server/release.mjs mac",
     "release:win": "node license-server/release.mjs win",
-    "license-server": "node license-server/server.mjs",
+    "license-server": "node license-server/start-admin.mjs",
     "admin:start": "node license-server/start-admin.mjs",
     "license:keys": "node license-server/generate-keys.mjs",
     "setup:license": "node license-server/setup.mjs",
