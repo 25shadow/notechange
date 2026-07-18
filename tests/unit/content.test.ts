@@ -29,6 +29,42 @@ describe('normalizeContent', () => {
     expect(output.warnings).toEqual([]);
   });
 
+  it('将纯文本行转换为 vivo 段落', () => {
+    const output = normalizeContent('第一段\n第二段');
+
+    expect(output.html).toBe('<p>第一段</p><p>第二段</p>');
+  });
+
+  it('将纯文本空行保留为空段落', () => {
+    const output = normalizeContent('第一段\n\n第二段');
+
+    expect(output.html).toBe('<p>第一段</p><p><br></p><p>第二段</p>');
+  });
+
+  it('保留空输入为空 HTML', () => {
+    const output = normalizeContent('');
+
+    expect(output.html).toBe('');
+  });
+
+  it('按 CRLF 和单独 CR 分隔纯文本段落', () => {
+    const output = normalizeContent('第一段\r\n第二段\r第三段');
+
+    expect(output.html).toBe('<p>第一段</p><p>第二段</p><p>第三段</p>');
+  });
+
+  it('将仅含空白的行作为段落内容保留', () => {
+    const output = normalizeContent('第一段\n   \n第二段');
+
+    expect(output.html).toBe('<p>第一段</p><p>   </p><p>第二段</p>');
+  });
+
+  it('转义纯文本中的 HTML 特殊字符', () => {
+    const output = normalizeContent('a < b & c');
+
+    expect(output.html).toBe('<p>a &lt; b &amp; c</p>');
+  });
+
   it('不把小米正文结构标签误报为无法迁移', () => {
     const output = normalizeContent(
       '<text>正文</text><background>背景字</background><mid-size>小米字</mid-size><new-format>新格式</new-format><order>排序</order>'

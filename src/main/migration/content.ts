@@ -27,7 +27,10 @@ export function normalizeContent(
   context: ContentHashContext = {}
 ): NormalizedContent {
   const window = new JSDOM('').window;
-  const normalizedHtml = normalizeLegacyTags(JSDOM.fragment(inputHtml));
+  const input = JSDOM.fragment(inputHtml);
+  const normalizedHtml = hasElementNodes(input)
+    ? normalizeLegacyTags(input)
+    : formatPlainText(inputHtml, window.document);
   const source = JSDOM.fragment(normalizedHtml);
   const unsupportedTags = new Set(
     [...source.querySelectorAll('*')]
@@ -62,6 +65,28 @@ export function normalizeContent(
       message: `包含无法自动迁移的 HTML 标签：${tag}`
     }))
   };
+}
+
+function hasElementNodes(source: DocumentFragment): boolean {
+  return source.querySelector('*') !== null;
+}
+
+function formatPlainText(input: string, document: Document): string {
+  if (input === '') return '';
+
+  const container = document.createElement('div');
+
+  for (const line of input.split(/\r\n?|\n/)) {
+    const paragraph = document.createElement('p');
+    if (line === '') {
+      paragraph.append(document.createElement('br'));
+    } else {
+      paragraph.textContent = line;
+    }
+    container.append(paragraph);
+  }
+
+  return container.innerHTML;
 }
 
 function normalizeLegacyTags(source: DocumentFragment): string {

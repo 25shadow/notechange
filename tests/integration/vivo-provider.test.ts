@@ -8,6 +8,7 @@ import {
   type VivoContractExecutor
 } from '../../src/main/providers/vivo/vivo-api';
 import { VivoProvider } from '../../src/main/providers/vivo/vivo-provider';
+import { normalizeContent } from '../../src/main/migration/content';
 import createSuccess from '../fixtures/vivo/create-success.json';
 import syncState from '../fixtures/vivo/sync-state.json';
 
@@ -87,6 +88,20 @@ describe('VivoProvider', () => {
     });
     expect(executor.calls[1]?.payload).not.toHaveProperty('jvq_param');
     expect(result.targetId).toBe('synthetic-target-1');
+  });
+
+  it('将小米纯文本笔记作为段落内容写入 createSync', async () => {
+    const executor = new FakeExecutor();
+    const contract = withVerifiedCreate(parseProviderContract(vivoContractJson));
+    const provider = new VivoProvider(new VivoApi(executor, contract));
+    const content = normalizeContent('第一段\n第二段');
+
+    await provider.upsertNote({ ...canonicalNote, ...content }, '0');
+
+    expect(executor.calls[1]).toMatchObject({
+      operation: 'createSync',
+      payload: { notes: [{ content: '<p>第一段</p><p>第二段</p>' }] }
+    });
   });
 
   it('不会静默丢弃尚未支持上传的图片附件', async () => {
