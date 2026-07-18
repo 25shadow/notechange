@@ -73,7 +73,8 @@ export function App({ api }: AppProps) {
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [exportPickerOpen, setExportPickerOpen] = useState(false);
-  const [openImportOnPreview, setOpenImportOnPreview] = useState(false);
+  const [importPickerOpen, setImportPickerOpen] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([{ message: '应用已启动', time: formatTime(new Date()), kind: 'info' }]);
 
   const log = (message: string, kind: LogEntry['kind'] = 'info') => setLogs((current) => [{ message, time: formatTime(new Date()), kind }, ...current].slice(0, 6));
@@ -125,12 +126,25 @@ export function App({ api }: AppProps) {
     } finally { setScanning(false); }
   };
 
-  const openPreview = async (summary: LocalExportSummary, openImport = false) => {
+  const openPreview = async (summary: LocalExportSummary) => {
     setError(null);
     try {
       const selected = await migrationApi.selectExport(summary.batchId);
-      setSelectedExport(selected); setOpenImportOnPreview(openImport); setPreviewOpen(true); log(`${openImport ? '打开导入' : '打开查看'}：${summary.batchId}`);
+      setSelectedExport(selected); setPreviewOpen(true); log(`打开查看：${summary.batchId}`);
     } catch { setError('无法读取所选本地批次。'); log('打开批次失败'); }
+  };
+
+  const openImport = async (summary: LocalExportSummary) => {
+    setError(null);
+    try {
+      const selected = await migrationApi.selectExport(summary.batchId);
+      setSelectedExport(selected);
+      setImportPickerOpen(true);
+      log(`选择导入批次：${summary.batchId}`);
+    } catch {
+      setError('无法读取所选本地批次。');
+      log('打开导入失败', 'error');
+    }
   };
 
   const deleteExport = async () => {
@@ -149,6 +163,7 @@ export function App({ api }: AppProps) {
   const xiaomiConnected = login.xiaomi.authenticated;
   const importToVivo = async () => {
     setError(null);
+    setImporting(true);
     try {
       await migrationApi.confirmMigration();
       const report = await migrationApi.startImport();
@@ -156,12 +171,13 @@ export function App({ api }: AppProps) {
       else if (report.failed > 0) { log(`导入完成但有失败：${report.failed} 条`, 'error'); setError(`导入完成但有 ${report.failed} 条失败。`); }
       else if (report.manualReview > 0) log(`导入完成：${report.manualReview} 条笔记未导入`, 'info');
       else log(`导入成功：新增 ${report.created} 条`, 'success');
+      setImportPickerOpen(false);
       return report;
     } catch (cause) {
       log('导入失败', 'error');
       setError('导入失败，请检查 vivo 登录状态后重试。');
       throw cause;
-    }
+    } finally { setImporting(false); }
   };
 
   return (
@@ -195,15 +211,16 @@ export function App({ api }: AppProps) {
             <thead><tr><th>来源</th><th>导出时间</th><th>笔记</th><th>附件</th><th>操作</th></tr></thead>
             <tbody>{exports.map((summary) => <tr key={summary.batchId} className={selectedExport?.batchId === summary.batchId ? 'selected' : ''}>
               <td data-label="来源">小米云笔记</td><td data-label="导出时间">{formatDate(summary.exportedAt)}</td><td data-label="笔记">{summary.noteCount}</td><td data-label="附件">{summary.attachmentCount}</td>
-              <td data-label="操作"><div className="export-actions"><button className="button compact primary" onClick={() => void openPreview(summary, true)}><Upload size={15} />导入</button><button className="button compact secondary" onClick={() => void openPreview(summary)}><Eye size={15} />查看</button><button className="button compact danger" aria-label={`删除批次 ${summary.batchId}`} onClick={() => setDeleteTarget(summary)}><Trash2 size={15} />删除</button></div></td>
+              <td data-label="操作"><div className="export-actions"><button className="button compact primary" onClick={() => void openImport(summary)}><Upload size={15} />导入</button><button className="button compact secondary" onClick={() => void openPreview(summary)}><Eye size={15} />查看</button><button className="button compact danger" aria-label={`删除批次 ${summary.batchId}`} onClick={() => setDeleteTarget(summary)}><Trash2 size={15} />删除</button></div></td>
             </tr>)}</tbody>
           </table>
         </div> : <div className="empty-state"><Download size={22} /><span>尚未生成导出批次</span></div>}
       </section>
 
-      {previewOpen && selectedExport && <ExportPreviewDialog api={migrationApi} summary={selectedExport} vivoAuthenticated={login.vivo.authenticated} initialImportOpen={openImportOnPreview} onRequestImport={importToVivo} onClose={() => { setOpenImportOnPreview(false); setPreviewOpen(false); }} />}
+      {previewOpen && selectedExport && <ExportPreviewDialog api={migrationApi} summary={selectedExport} onClose={() => setPreviewOpen(false)} />}
       {deleteTarget && <DeleteExportDialog summary={deleteTarget} deleting={deleting} onCancel={() => !deleting && setDeleteTarget(null)} onConfirm={() => void deleteExport()} />}
       {exportPickerOpen && <ExportPickerDialog xiaomiConnected={xiaomiConnected} scanning={scanning} onCancel={() => setExportPickerOpen(false)} onExportXiaomi={() => void scan()} />}
+      {importPickerOpen && <ImportPickerDialog vivoConnected={login.vivo.authenticated} importing={importing} onCancel={() => !importing && setImportPickerOpen(false)} onImport={() => void importToVivo()} />}
     </main>
   );
 }
@@ -213,6 +230,15 @@ function ExportPickerDialog({ xiaomiConnected, scanning, onCancel, onExportXiaom
     <div><h2>选择导出平台</h2><p>选择要保存到本地的云笔记</p></div>
     <div className="picker-options"><button className="button secondary" disabled={!xiaomiConnected || scanning} onClick={onExportXiaomi}>{scanning ? '正在导出' : '小米云笔记'}</button><button className="button secondary" disabled>vivo 原子笔记（暂未支持）</button></div>
     <div className="confirm-actions"><button className="button secondary" onClick={onCancel}>取消</button></div>
+  </section></div>;
+}
+
+function ImportPickerDialog({ vivoConnected, importing, onCancel, onImport }: { vivoConnected: boolean; importing: boolean; onCancel: () => void; onImport: () => void }) {
+  return <div className="confirm-overlay" role="presentation"><section className="confirm-dialog picker-dialog" role="dialog" aria-modal="true" aria-label="选择导入平台">
+    <div><h2>选择导入平台</h2><p>将当前批次导入到目标云服务</p></div>
+    <div className="picker-options"><button className="button secondary" disabled={!vivoConnected || importing} onClick={onImport}>{importing ? '正在导入' : '导入到 vivo 原子笔记'}</button><button className="button secondary" disabled>导入到小米云笔记（暂未支持）</button></div>
+    {!vivoConnected && <p className="picker-result">请先登录 vivo 原子笔记</p>}
+    <div className="confirm-actions"><button className="button secondary" disabled={importing} onClick={onCancel}>取消</button></div>
   </section></div>;
 }
 

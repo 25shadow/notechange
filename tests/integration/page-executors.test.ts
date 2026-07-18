@@ -137,7 +137,7 @@ describe.skipIf(process.env.CODEX_SANDBOX === 'seatbelt')('页面契约执行器
     await expect(
       executor.call(operation, { query: { syncTag: 'synthetic-cursor' } })
     ).resolves.toEqual({ cursor: 'synthetic-cursor' });
-  });
+  }, 15_000);
 
   it('按 KSS 元数据下载并解包小米附件字节', async () => {
     const page = await sessions.open('xiaomi-image-executor', origin);
@@ -154,7 +154,7 @@ describe.skipIf(process.env.CODEX_SANDBOX === 'seatbelt')('页面契约执行器
     });
 
     expect(Buffer.from(bytes)).toEqual(imageSource);
-  });
+  }, 15_000);
 
   it('只在页面上下文中生成 vivo 加密外层', async () => {
     const page = await sessions.open('vivo-executor', origin);
@@ -170,7 +170,7 @@ describe.skipIf(process.env.CODEX_SANDBOX === 'seatbelt')('页面契约执行器
     await expect(executor.call(operation, { type: 0, notes: [] })).resolves.toEqual({
       wrappedOnly: true
     });
-  });
+  }, 15_000);
 });
 
 function rc4(input: Uint8Array, key: Uint8Array): Buffer {

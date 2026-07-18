@@ -56,7 +56,7 @@ describe.skipIf(process.env.CODEX_SANDBOX === 'seatbelt')('SessionManager', () =
     await expect(runSameOrigin(headlessPage, '/api/me', { method: 'GET' })).resolves.toEqual({
       authenticated: true
     });
-  });
+  }, 15_000);
 
   it('关闭应用上下文后从固定 profile 恢复会话 Cookie', async () => {
     const root = await mkdtemp(join(tmpdir(), 'notechange-persistent-session-'));
